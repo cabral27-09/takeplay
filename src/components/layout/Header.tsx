@@ -1,8 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Search, Menu, X } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Search, Menu, X, LogIn, LogOut, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const navLinks = [
   { label: 'Início', href: '/' },
@@ -14,6 +23,8 @@ export const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, profile, roles, signOut, isLoading } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -27,6 +38,17 @@ export const Header = () => {
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/');
+  };
+
+  const getRoleBadge = () => {
+    if (roles.includes('admin')) return 'Admin';
+    if (roles.includes('producer')) return 'Produtor';
+    return 'Espectador';
+  };
 
   return (
     <header
@@ -71,13 +93,51 @@ export const Header = () => {
         </nav>
 
         {/* Right Side Actions */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <Link
             to="/search"
             className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           >
             <Search className="h-5 w-5" />
           </Link>
+
+          {/* Auth Button */}
+          {!isLoading && (
+            <>
+              {user ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="rounded-full">
+                      <User className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <div className="px-2 py-2">
+                      <p className="text-sm font-medium truncate">
+                        {profile?.full_name || user.email}
+                      </p>
+                      <p className="text-xs text-primary">{getRoleBadge()}</p>
+                    </div>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Sair
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => navigate('/auth')}
+                  className="hidden md:flex"
+                >
+                  <LogIn className="mr-2 h-4 w-4" />
+                  Entrar
+                </Button>
+              )}
+            </>
+          )}
 
           {/* Mobile Menu Toggle */}
           <button
@@ -117,6 +177,25 @@ export const Header = () => {
                   {link.label}
                 </Link>
               ))}
+              
+              {/* Mobile Auth Button */}
+              {!isLoading && !user && (
+                <Link
+                  to="/auth"
+                  className="px-4 py-3 rounded-lg text-sm font-medium bg-primary text-primary-foreground text-center"
+                >
+                  Entrar
+                </Link>
+              )}
+              
+              {!isLoading && user && (
+                <button
+                  onClick={handleSignOut}
+                  className="px-4 py-3 rounded-lg text-sm font-medium text-destructive text-left hover:bg-secondary"
+                >
+                  Sair
+                </button>
+              )}
             </nav>
           </motion.div>
         )}
