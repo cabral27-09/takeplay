@@ -14,6 +14,7 @@ export interface Movie {
   };
   rating: number;
   vimeoId?: string;
+  trailerUrl?: string;
   status: 'draft' | 'in_review' | 'published' | 'rejected' | 'suspended';
   featured?: boolean;
 }
@@ -47,6 +48,7 @@ export const movies: Movie[] = [
     backdrop: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1920&h=1080&fit=crop',
     producer: { id: 'p1', name: 'Aurora Filmes', type: 'studio' },
     rating: 4.8,
+    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
     status: 'published',
     featured: true,
   },
@@ -61,6 +63,7 @@ export const movies: Movie[] = [
     backdrop: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920&h=1080&fit=crop',
     producer: { id: 'p2', name: 'Carlos Mendes', type: 'individual' },
     rating: 4.6,
+    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
     status: 'published',
   },
   {
@@ -74,6 +77,7 @@ export const movies: Movie[] = [
     backdrop: 'https://images.unsplash.com/photo-1518173946687-a4c036bc6d74?w=1920&h=1080&fit=crop',
     producer: { id: 'p3', name: 'Estúdio Lua Nova', type: 'studio' },
     rating: 4.4,
+    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
     status: 'published',
   },
   {
@@ -87,6 +91,7 @@ export const movies: Movie[] = [
     backdrop: 'https://images.unsplash.com/photo-1527224538127-2104bb71c51b?w=1920&h=1080&fit=crop',
     producer: { id: 'p4', name: 'Risada Produções', type: 'studio' },
     rating: 4.2,
+    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
     status: 'published',
   },
   {
@@ -100,6 +105,7 @@ export const movies: Movie[] = [
     backdrop: 'https://images.unsplash.com/photo-1509347528160-9a9e33742cdb?w=1920&h=1080&fit=crop',
     producer: { id: 'p5', name: 'Noir Studios', type: 'studio' },
     rating: 4.7,
+    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
     status: 'published',
     featured: true,
   },
@@ -114,6 +120,7 @@ export const movies: Movie[] = [
     backdrop: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920&h=1080&fit=crop',
     producer: { id: 'p6', name: 'Cosmos Filmes', type: 'studio' },
     rating: 4.9,
+    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
     status: 'published',
   },
   {
@@ -127,6 +134,7 @@ export const movies: Movie[] = [
     backdrop: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1920&h=1080&fit=crop',
     producer: { id: 'p7', name: 'Animação Brasileira', type: 'studio' },
     rating: 4.5,
+    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
     status: 'published',
   },
   {
@@ -140,6 +148,7 @@ export const movies: Movie[] = [
     backdrop: 'https://images.unsplash.com/photo-1505253716362-afaea1d3d1af?w=1920&h=1080&fit=crop',
     producer: { id: 'p8', name: 'Medo Films', type: 'studio' },
     rating: 4.3,
+    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
     status: 'published',
   },
   {
@@ -153,6 +162,7 @@ export const movies: Movie[] = [
     backdrop: 'https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=1920&h=1080&fit=crop',
     producer: { id: 'p9', name: 'Verde Produções', type: 'studio' },
     rating: 4.8,
+    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
     status: 'published',
     featured: true,
   },
@@ -167,6 +177,7 @@ export const movies: Movie[] = [
     backdrop: 'https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=1920&h=1080&fit=crop',
     producer: { id: 'p10', name: 'Coração Produções', type: 'studio' },
     rating: 4.1,
+    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
     status: 'published',
   },
 ];
@@ -187,4 +198,8 @@ export const getPublishedMovies = (): Movie[] => {
 
 export const getMovieById = (id: string): Movie | undefined => {
   return movies.find(m => m.id === id);
+};
+
+export const getMoviesWithTrailers = (): Movie[] => {
+  return movies.filter(m => m.trailerUrl && m.status === 'published');
 };

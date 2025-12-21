@@ -11,6 +11,7 @@ import Browse from "./pages/Browse";
 import Genres from "./pages/Genres";
 import Search from "./pages/Search";
 import Auth from "./pages/Auth";
+import Trailers from "./pages/Trailers";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,6 +30,7 @@ const App = () => (
             <Route path="/watch/:id" element={<Watch />} />
             <Route path="/browse" element={<Browse />} />
             <Route path="/genres" element={<Genres />} />
+            <Route path="/trailers" element={<Trailers />} />
             <Route path="/search" element={<Search />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

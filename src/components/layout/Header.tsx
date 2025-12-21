@@ -16,6 +16,7 @@ import {
 const navLinks = [
   { label: 'Início', href: '/' },
   { label: 'Filmes', href: '/browse' },
+  { label: 'Trailers', href: '/trailers' },
   { label: 'Gêneros', href: '/genres' },
 ];
 
