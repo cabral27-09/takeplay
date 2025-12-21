@@ -44,10 +44,10 @@ export const Header = () => {
             className="flex items-center gap-2"
           >
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">I</span>
+              <span className="text-primary-foreground font-bold text-lg">T</span>
             </div>
             <span className="text-xl font-semibold tracking-tight text-foreground">
-              Indie<span className="text-primary">Flix</span>
+              Tie<span className="text-primary">Flix</span>
             </span>
           </motion.div>
         </Link>
