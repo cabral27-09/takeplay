@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { SubscriptionTier, getTierByProductId } from '@/lib/subscription-tiers';
 
 type AppRole = 'viewer' | 'producer' | 'admin';
 
@@ -13,6 +14,8 @@ interface Profile {
 interface SubscriptionInfo {
   subscribed: boolean;
   subscriptionEnd: string | null;
+  tier: SubscriptionTier;
+  productId: string | null;
 }
 
 interface AuthContextType {
@@ -40,13 +43,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [subscription, setSubscription] = useState<SubscriptionInfo>({
     subscribed: false,
     subscriptionEnd: null,
+    tier: 'free',
+    productId: null,
   });
 
   const checkSubscription = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        setSubscription({ subscribed: false, subscriptionEnd: null });
+        setSubscription({ subscribed: false, subscriptionEnd: null, tier: 'free', productId: null });
         return;
       }
 
@@ -61,9 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const productId = data?.product_id ?? null;
+      const tier = getTierByProductId(productId);
+
       setSubscription({
         subscribed: data?.subscribed ?? false,
         subscriptionEnd: data?.subscription_end ?? null,
+        tier,
+        productId,
       });
     } catch (error) {
       console.error('Error checking subscription:', error);
@@ -109,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(null);
           setRoles([]);
-          setSubscription({ subscribed: false, subscriptionEnd: null });
+          setSubscription({ subscribed: false, subscriptionEnd: null, tier: 'free', productId: null });
         }
         
         setIsLoading(false);
@@ -163,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setProfile(null);
     setRoles([]);
-    setSubscription({ subscribed: false, subscriptionEnd: null });
+    setSubscription({ subscribed: false, subscriptionEnd: null, tier: 'free', productId: null });
   };
 
   const hasRole = (role: AppRole) => roles.includes(role);

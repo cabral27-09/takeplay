@@ -18,6 +18,7 @@ const navLinks = [
   { label: 'Filmes', href: '/browse' },
   { label: 'Trailers', href: '/trailers' },
   { label: 'Gêneros', href: '/genres' },
+  { label: 'Planos', href: '/pricing' },
 ];
 
 export const Header = () => {
