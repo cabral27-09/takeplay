@@ -14,8 +14,9 @@ import {
 } from 'lucide-react';
 import { getMovieById } from '@/data/mockMovies';
 import { cn } from '@/lib/utils';
+import { SubscriptionGate } from '@/components/subscription/SubscriptionGate';
 
-const Watch = () => {
+const WatchContent = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const movie = getMovieById(id || '');
@@ -259,6 +260,17 @@ const Watch = () => {
         )}
       </AnimatePresence>
     </div>
+  );
+};
+
+const Watch = () => {
+  const { id } = useParams<{ id: string }>();
+  const movie = getMovieById(id || '');
+
+  return (
+    <SubscriptionGate movieTitle={movie?.title}>
+      <WatchContent />
+    </SubscriptionGate>
   );
 };
 
