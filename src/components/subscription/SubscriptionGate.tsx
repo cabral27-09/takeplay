@@ -138,7 +138,13 @@ export function SubscriptionGate({ children, movieTitle }: SubscriptionGateProps
 
           {/* Back link */}
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              if (window.history.length > 1) {
+                navigate(-1);
+              } else {
+                navigate('/');
+              }
+            }}
             className="mt-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             Voltar
