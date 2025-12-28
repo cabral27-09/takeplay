@@ -1,10 +1,10 @@
-import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Lock, Crown, Sparkles } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { useState } from 'react';
-import { toast } from 'sonner';
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Lock, Crown, Sparkles } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
+import { toast } from "sonner";
 
 interface SubscriptionGateProps {
   children: React.ReactNode;
@@ -18,36 +18,38 @@ export function SubscriptionGate({ children, movieTitle }: SubscriptionGateProps
 
   const handleSubscribe = async () => {
     if (!user) {
-      navigate('/auth');
+      navigate("/auth");
       return;
     }
 
     setIsCheckingOut(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
-        navigate('/auth');
+        navigate("/auth");
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke('create-checkout', {
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
       });
 
       if (error) {
-        toast.error('Erro ao iniciar checkout');
-        console.error('Checkout error:', error);
+        toast.error("Erro ao iniciar checkout");
+        console.error("Checkout error:", error);
         return;
       }
 
       if (data?.url) {
-        window.open(data.url, '_blank');
+        window.open(data.url, "_blank");
       }
     } catch (error) {
-      toast.error('Erro ao processar assinatura');
-      console.error('Subscription error:', error);
+      toast.error("Erro ao processar assinatura");
+      console.error("Subscription error:", error);
     } finally {
       setIsCheckingOut(false);
     }
@@ -72,7 +74,7 @@ export function SubscriptionGate({ children, movieTitle }: SubscriptionGateProps
       <div className="relative max-w-lg w-full">
         {/* Background glow effect */}
         <div className="absolute -inset-1 bg-gradient-to-r from-primary/30 via-accent/30 to-primary/30 rounded-2xl blur-xl opacity-50" />
-        
+
         <div className="relative bg-card border border-border rounded-2xl p-8 text-center">
           {/* Premium badge */}
           <div className="flex justify-center mb-6">
@@ -91,7 +93,7 @@ export function SubscriptionGate({ children, movieTitle }: SubscriptionGateProps
 
           {/* Title */}
           <h2 className="text-2xl font-bold text-foreground mb-2">
-            {movieTitle ? `Assista "${movieTitle}"` : 'Conteúdo Exclusivo'}
+            {movieTitle ? `Assista "${movieTitle}"` : "Conteúdo Exclusivo"}
           </h2>
           <p className="text-muted-foreground mb-8">
             Assine o TieFlix Premium para ter acesso ilimitado a todos os filmes completos da plataforma.
@@ -100,10 +102,10 @@ export function SubscriptionGate({ children, movieTitle }: SubscriptionGateProps
           {/* Features */}
           <div className="grid gap-3 mb-8 text-left">
             {[
-              'Acesso ilimitado a todos os filmes',
-              'Qualidade HD e 4K',
-              'Novos lançamentos toda semana',
-              'Cancele quando quiser',
+              "Acesso ilimitado a todos os filmes",
+              "Qualidade HD e 4K",
+              "Novos lançamentos toda semana",
+              "Cancele quando quiser",
             ].map((feature, index) => (
               <div key={index} className="flex items-center gap-3">
                 <Sparkles className="h-4 w-4 text-primary flex-shrink-0" />
@@ -127,13 +129,7 @@ export function SubscriptionGate({ children, movieTitle }: SubscriptionGateProps
             className="w-full h-12 text-lg font-semibold"
             size="lg"
           >
-            {isCheckingOut ? (
-              'Processando...'
-            ) : user ? (
-              'Assinar Agora'
-            ) : (
-              'Fazer Login para Assinar'
-            )}
+            {isCheckingOut ? "Processando..." : user ? "Assinar Agora" : "Fazer Login para Assinar"}
           </Button>
 
           {/* Back link */}
@@ -142,12 +138,12 @@ export function SubscriptionGate({ children, movieTitle }: SubscriptionGateProps
               if (window.history.length > 1) {
                 navigate(-1);
               } else {
-                navigate('/');
+                navigate("/");
               }
             }}
             className="mt-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            Voltar
+            Voltar para o início
           </button>
         </div>
       </div>
