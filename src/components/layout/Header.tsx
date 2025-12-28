@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Menu, X, LogIn, LogOut, User } from 'lucide-react';
+import { Search, Menu, X, LogIn, LogOut, User, Crown, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { SUBSCRIPTION_TIERS } from '@/lib/subscription-tiers';
 
 const navLinks = [
   { label: 'Início', href: '/' },
@@ -26,7 +27,7 @@ export const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, profile, roles, signOut, isLoading } = useAuth();
+  const { user, profile, roles, subscription, signOut, isLoading } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -50,6 +51,31 @@ export const Header = () => {
     if (roles.includes('admin')) return 'Admin';
     if (roles.includes('producer')) return 'Produtor';
     return 'Espectador';
+  };
+
+  const getPlanBadge = () => {
+    const tier = subscription.tier;
+    const tierInfo = SUBSCRIPTION_TIERS[tier];
+    
+    if (tier === 'premium') {
+      return {
+        label: tierInfo.name,
+        icon: Crown,
+        className: 'bg-primary/20 text-primary border-primary/30',
+      };
+    }
+    if (tier === 'standard') {
+      return {
+        label: tierInfo.name,
+        icon: Sparkles,
+        className: 'bg-accent/20 text-accent border-accent/30',
+      };
+    }
+    return {
+      label: tierInfo.name,
+      icon: null,
+      className: 'bg-muted text-muted-foreground border-border',
+    };
   };
 
   return (
@@ -107,26 +133,63 @@ export const Header = () => {
           {!isLoading && (
             <>
               {user ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="rounded-full">
-                      <User className="h-5 w-5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <div className="px-2 py-2">
-                      <p className="text-sm font-medium truncate">
-                        {profile?.full_name || user.email}
-                      </p>
-                      <p className="text-xs text-primary">{getRoleBadge()}</p>
-                    </div>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-                      <LogOut className="mr-2 h-4 w-4" />
-                      Sair
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <div className="flex items-center gap-2">
+                  {/* Plan Badge */}
+                  {(() => {
+                    const planBadge = getPlanBadge();
+                    return (
+                      <Link
+                        to="/pricing"
+                        className={cn(
+                          'hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors hover:opacity-80',
+                          planBadge.className
+                        )}
+                      >
+                        {planBadge.icon && <planBadge.icon className="h-3 w-3" />}
+                        {planBadge.label}
+                      </Link>
+                    );
+                  })()}
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="rounded-full">
+                        <User className="h-5 w-5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <div className="px-2 py-2">
+                        <p className="text-sm font-medium truncate">
+                          {profile?.full_name || user.email}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-muted-foreground">{getRoleBadge()}</span>
+                          <span className="text-xs text-muted-foreground">•</span>
+                          {(() => {
+                            const planBadge = getPlanBadge();
+                            return (
+                              <span className={cn('text-xs font-medium', planBadge.className.includes('text-primary') ? 'text-primary' : planBadge.className.includes('text-accent') ? 'text-accent' : 'text-muted-foreground')}>
+                                {planBadge.label}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link to="/pricing" className="cursor-pointer">
+                          <Crown className="mr-2 h-4 w-4" />
+                          Gerenciar Plano
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Sair
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               ) : (
                 <Button
                   variant="default"
