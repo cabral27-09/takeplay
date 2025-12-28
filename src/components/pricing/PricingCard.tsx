@@ -1,8 +1,8 @@
-import { Check } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { TierInfo, SubscriptionTier } from '@/lib/subscription-tiers';
+import { Check } from "lucide-react";
+import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { TierInfo, SubscriptionTier } from "@/lib/subscription-tiers";
 
 interface PricingCardProps {
   tier: SubscriptionTier;
@@ -26,20 +26,20 @@ export function PricingCard({
   onLogin,
 }: PricingCardProps) {
   const isCurrentPlan = currentTier === tier;
-  const canUpgrade = tier !== 'free' && !isCurrentPlan;
-  const isFree = tier === 'free';
+  const canUpgrade = tier !== "free" && !isCurrentPlan;
+  const isFree = tier === "free";
 
   const handleAction = () => {
     if (!isLoggedIn) {
       onLogin();
       return;
     }
-    
+
     if (isCurrentPlan && !isFree) {
       onManage();
       return;
     }
-    
+
     if (canUpgrade && info.priceId) {
       onSubscribe(info.priceId);
     }
@@ -47,12 +47,12 @@ export function PricingCard({
 
   const getButtonText = () => {
     if (!isLoggedIn) {
-      return isFree ? 'Criar Conta Grátis' : 'Entrar para Assinar';
+      return isFree ? "Criar Conta Grátis" : "Assine para assistir";
     }
     if (isCurrentPlan) {
-      return isFree ? 'Seu Plano Atual' : 'Gerenciar Assinatura';
+      return isFree ? "Seu Plano Atual" : "Gerenciar Assinatura";
     }
-    return 'Assinar Agora';
+    return "Assinar Agora";
   };
 
   return (
@@ -60,10 +60,8 @@ export function PricingCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'relative flex flex-col rounded-2xl border p-6 md:p-8',
-        info.highlighted
-          ? 'border-primary bg-primary/5 shadow-lg shadow-primary/20'
-          : 'border-border bg-card'
+        "relative flex flex-col rounded-2xl border p-6 md:p-8",
+        info.highlighted ? "border-primary bg-primary/5 shadow-lg shadow-primary/20" : "border-border bg-card",
       )}
     >
       {/* Popular Badge */}
@@ -93,12 +91,8 @@ export function PricingCard({
       {/* Price */}
       <div className="mb-6">
         <div className="flex items-baseline gap-1">
-          <span className="text-4xl font-bold text-foreground">
-            R$ {info.price.toFixed(2).replace('.', ',')}
-          </span>
-          {!isFree && (
-            <span className="text-muted-foreground">/mês</span>
-          )}
+          <span className="text-4xl font-bold text-foreground">R$ {info.price.toFixed(2).replace(".", ",")}</span>
+          {!isFree && <span className="text-muted-foreground">/mês</span>}
         </div>
       </div>
 
@@ -116,11 +110,11 @@ export function PricingCard({
       <Button
         onClick={handleAction}
         disabled={isLoading || (isCurrentPlan && isFree)}
-        variant={info.highlighted ? 'default' : 'outline'}
+        variant={info.highlighted ? "default" : "outline"}
         className="w-full"
         size="lg"
       >
-        {isLoading ? 'Carregando...' : getButtonText()}
+        {isLoading ? "Carregando..." : getButtonText()}
       </Button>
     </motion.div>
   );
