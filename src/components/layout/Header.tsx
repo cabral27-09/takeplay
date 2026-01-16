@@ -117,8 +117,9 @@ export const Header = () => {
                   {/* Plan Badge */}
                   {(() => {
               const planBadge = getPlanBadge();
-              return <Link to="/pricing" className={cn('hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors hover:opacity-80', planBadge.className)}>Plano Free{planBadge.icon && <planBadge.icon className="h-3 w-3" />}
-                        {planBadge.label}
+return <Link to="/pricing" className={cn('hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors hover:opacity-80', planBadge.className)}>
+                        Plano Free
+                        {planBadge.icon && <planBadge.icon className="h-3 w-3" />}
                       </Link>;
             })()}
                   
