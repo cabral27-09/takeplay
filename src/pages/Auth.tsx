@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Film, Clapperboard, User, Mail, Lock, Loader2 } from 'lucide-react';
+import { Film, Clapperboard, User, Mail, Lock, Loader2, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
@@ -16,10 +17,15 @@ const authSchema = z.object({
   fullName: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres').max(100, 'Nome muito longo').optional(),
 });
 
+const forgotPasswordSchema = z.object({
+  email: z.string().email('Email inválido'),
+});
+
 type AppRole = 'viewer' | 'producer';
+type AuthMode = 'login' | 'signup' | 'forgot-password';
 
 export default function Auth() {
-  const [isLogin, setIsLogin] = useState(true);
+  const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -38,11 +44,15 @@ export default function Auth() {
 
   const validateForm = () => {
     try {
-      const data: { email: string; password: string; fullName?: string } = { email, password };
-      if (!isLogin) {
-        data.fullName = fullName;
+      if (mode === 'forgot-password') {
+        forgotPasswordSchema.parse({ email });
+      } else {
+        const data: { email: string; password: string; fullName?: string } = { email, password };
+        if (mode === 'signup') {
+          data.fullName = fullName;
+        }
+        authSchema.parse(data);
       }
-      authSchema.parse(data);
       setErrors({});
       return true;
     } catch (error) {
@@ -59,15 +69,43 @@ export default function Auth() {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!validateForm()) return;
+    
+    setIsSubmitting(true);
+
+    try {
+      const redirectUrl = `${window.location.origin}/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl,
+      });
+      
+      if (error) {
+        toast.error('Erro ao enviar email: ' + error.message);
+      } else {
+        toast.success('Link de recuperação enviado! Verifique seu email.');
+        setMode('login');
+        setEmail('');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (mode === 'forgot-password') {
+      await handleForgotPassword();
+      return;
+    }
     
     if (!validateForm()) return;
     
     setIsSubmitting(true);
 
     try {
-      if (isLogin) {
+      if (mode === 'login') {
         const { error } = await signIn(email, password);
         if (error) {
           if (error.message.includes('Invalid login credentials')) {
@@ -104,6 +142,22 @@ export default function Auth() {
       </div>
     );
   }
+
+  const getTitle = () => {
+    switch (mode) {
+      case 'login': return 'Entrar';
+      case 'signup': return 'Criar Conta';
+      case 'forgot-password': return 'Recuperar Senha';
+    }
+  };
+
+  const getSubtitle = () => {
+    switch (mode) {
+      case 'login': return 'Entre para continuar assistindo';
+      case 'signup': return 'Crie sua conta gratuitamente';
+      case 'forgot-password': return 'Digite seu email para receber um link de recuperação';
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -157,17 +211,29 @@ export default function Auth() {
           </div>
 
           <div className="bg-card border border-border rounded-2xl p-8">
+            {mode === 'forgot-password' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('login');
+                  setErrors({});
+                }}
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors mb-4"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Voltar
+              </button>
+            )}
+
             <h2 className="text-2xl font-bold text-foreground mb-2">
-              {isLogin ? 'Entrar' : 'Criar Conta'}
+              {getTitle()}
             </h2>
             <p className="text-muted-foreground mb-6">
-              {isLogin 
-                ? 'Entre para continuar assistindo' 
-                : 'Crie sua conta gratuitamente'}
+              {getSubtitle()}
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {!isLogin && (
+              {mode === 'signup' && (
                 <div className="space-y-2">
                   <Label htmlFor="fullName">Nome Completo</Label>
                   <div className="relative">
@@ -205,25 +271,43 @@ export default function Auth() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10"
-                  />
+              {mode !== 'forgot-password' && (
+                <div className="space-y-2">
+                  <Label htmlFor="password">Senha</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  {errors.password && (
+                    <p className="text-sm text-destructive">{errors.password}</p>
+                  )}
                 </div>
-                {errors.password && (
-                  <p className="text-sm text-destructive">{errors.password}</p>
-                )}
-              </div>
+              )}
 
-              {!isLogin && (
+              {mode === 'login' && (
+                <div className="text-right">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('forgot-password');
+                      setErrors({});
+                      setPassword('');
+                    }}
+                    className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    Esqueceu a senha?
+                  </button>
+                </div>
+              )}
+
+              {mode === 'signup' && (
                 <div className="space-y-3">
                   <Label>Tipo de Conta</Label>
                   <RadioGroup
@@ -274,24 +358,28 @@ export default function Auth() {
                 {isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : null}
-                {isLogin ? 'Entrar' : 'Criar Conta'}
+                {mode === 'login' && 'Entrar'}
+                {mode === 'signup' && 'Criar Conta'}
+                {mode === 'forgot-password' && 'Enviar Link de Recuperação'}
               </Button>
             </form>
 
-            <div className="mt-6 text-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsLogin(!isLogin);
-                  setErrors({});
-                }}
-                className="text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                {isLogin 
-                  ? 'Não tem conta? Criar conta' 
-                  : 'Já tem conta? Entrar'}
-              </button>
-            </div>
+            {mode !== 'forgot-password' && (
+              <div className="mt-6 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode(mode === 'login' ? 'signup' : 'login');
+                    setErrors({});
+                  }}
+                  className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  {mode === 'login' 
+                    ? 'Não tem conta? Criar conta' 
+                    : 'Já tem conta? Entrar'}
+                </button>
+              </div>
+            )}
           </div>
         </motion.div>
       </div>
