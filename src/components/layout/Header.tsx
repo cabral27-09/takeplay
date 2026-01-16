@@ -146,12 +146,20 @@ export const Header = () => {
                       </div>
                       <DropdownMenuSeparator />
                       {roles.includes('admin') && (
-                        <DropdownMenuItem asChild>
-                          <Link to="/admin/movies" className="cursor-pointer">
-                            <Film className="mr-2 h-4 w-4" />
-                            Gerenciar Filmes
-                          </Link>
-                        </DropdownMenuItem>
+                        <>
+                          <DropdownMenuItem asChild>
+                            <Link to="/admin/movies" className="cursor-pointer">
+                              <Film className="mr-2 h-4 w-4" />
+                              Gerenciar Filmes
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link to="/admin/users" className="cursor-pointer">
+                              <User className="mr-2 h-4 w-4" />
+                              Gerenciar Usuários
+                            </Link>
+                          </DropdownMenuItem>
+                        </>
                       )}
                       <DropdownMenuItem asChild>
                         <Link to="/pricing" className="cursor-pointer">
