@@ -300,7 +300,7 @@ export default function Auth() {
                       setErrors({});
                       setPassword('');
                     }}
-                    className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                    className="text-sm text-primary/80 hover:text-primary underline underline-offset-2 transition-colors"
                   >
                     Esqueceu a senha?
                   </button>
