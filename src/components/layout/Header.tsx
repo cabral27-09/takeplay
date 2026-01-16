@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Menu, X, LogIn, LogOut, User, Crown, Sparkles } from 'lucide-react';
+import { Search, Menu, X, LogIn, LogOut, User, Crown, Sparkles, Film } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -145,6 +145,14 @@ export const Header = () => {
                         </div>
                       </div>
                       <DropdownMenuSeparator />
+                      {roles.includes('admin') && (
+                        <DropdownMenuItem asChild>
+                          <Link to="/admin/movies" className="cursor-pointer">
+                            <Film className="mr-2 h-4 w-4" />
+                            Gerenciar Filmes
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem asChild>
                         <Link to="/pricing" className="cursor-pointer">
                           <Crown className="mr-2 h-4 w-4" />
