@@ -10,7 +10,7 @@ export const Layout = ({ children, hideHeader = false }: LayoutProps) => {
   return (
     <div className="min-h-screen bg-background">
       {!hideHeader && <Header />}
-      <main>{children}</main>
+      <main className={!hideHeader ? "pt-16 md:pt-20" : ""}>{children}</main>
     </div>
   );
 };
