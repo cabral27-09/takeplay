@@ -11,6 +11,7 @@ import Browse from "./pages/Browse";
 import Genres from "./pages/Genres";
 import Search from "./pages/Search";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import Trailers from "./pages/Trailers";
 import Pricing from "./pages/Pricing";
 import NotFound from "./pages/NotFound";
@@ -30,6 +31,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/movie/:id" element={<MovieDetail />} />
             <Route path="/watch/:id" element={<Watch />} />
             <Route path="/browse" element={<Browse />} />
