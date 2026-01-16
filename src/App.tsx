@@ -14,6 +14,8 @@ import Auth from "./pages/Auth";
 import Trailers from "./pages/Trailers";
 import Pricing from "./pages/Pricing";
 import NotFound from "./pages/NotFound";
+import AdminMovies from "./pages/admin/Movies";
+import MovieForm from "./pages/admin/MovieForm";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +36,9 @@ const App = () => (
             <Route path="/trailers" element={<Trailers />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/search" element={<Search />} />
+            <Route path="/admin/movies" element={<AdminMovies />} />
+            <Route path="/admin/movies/new" element={<MovieForm />} />
+            <Route path="/admin/movies/:id/edit" element={<MovieForm />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

@@ -14,6 +14,123 @@ export type Database = {
   }
   public: {
     Tables: {
+      genres: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          slug: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          slug: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          slug?: string
+        }
+        Relationships: []
+      }
+      movie_genres: {
+        Row: {
+          created_at: string
+          genre_id: string
+          id: string
+          movie_id: string
+        }
+        Insert: {
+          created_at?: string
+          genre_id: string
+          id?: string
+          movie_id: string
+        }
+        Update: {
+          created_at?: string
+          genre_id?: string
+          id?: string
+          movie_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "movie_genres_genre_id_fkey"
+            columns: ["genre_id"]
+            isOneToOne: false
+            referencedRelation: "genres"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "movie_genres_movie_id_fkey"
+            columns: ["movie_id"]
+            isOneToOne: false
+            referencedRelation: "movies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      movies: {
+        Row: {
+          backdrop_url: string | null
+          created_at: string
+          duration: number | null
+          featured: boolean
+          id: string
+          min_tier: Database["public"]["Enums"]["subscription_tier"]
+          producer_name: string | null
+          producer_type: string | null
+          rating: number | null
+          status: Database["public"]["Enums"]["movie_status"]
+          synopsis: string | null
+          thumbnail_url: string | null
+          title: string
+          trailer_url: string | null
+          updated_at: string
+          video_url: string | null
+          year: number | null
+        }
+        Insert: {
+          backdrop_url?: string | null
+          created_at?: string
+          duration?: number | null
+          featured?: boolean
+          id?: string
+          min_tier?: Database["public"]["Enums"]["subscription_tier"]
+          producer_name?: string | null
+          producer_type?: string | null
+          rating?: number | null
+          status?: Database["public"]["Enums"]["movie_status"]
+          synopsis?: string | null
+          thumbnail_url?: string | null
+          title: string
+          trailer_url?: string | null
+          updated_at?: string
+          video_url?: string | null
+          year?: number | null
+        }
+        Update: {
+          backdrop_url?: string | null
+          created_at?: string
+          duration?: number | null
+          featured?: boolean
+          id?: string
+          min_tier?: Database["public"]["Enums"]["subscription_tier"]
+          producer_name?: string | null
+          producer_type?: string | null
+          rating?: number | null
+          status?: Database["public"]["Enums"]["movie_status"]
+          synopsis?: string | null
+          thumbnail_url?: string | null
+          title?: string
+          trailer_url?: string | null
+          updated_at?: string
+          video_url?: string | null
+          year?: number | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -74,6 +191,8 @@ export type Database = {
     }
     Enums: {
       app_role: "viewer" | "producer" | "admin"
+      movie_status: "draft" | "published"
+      subscription_tier: "free" | "standard" | "premium"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -202,6 +321,8 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["viewer", "producer", "admin"],
+      movie_status: ["draft", "published"],
+      subscription_tier: ["free", "standard", "premium"],
     },
   },
 } as const
