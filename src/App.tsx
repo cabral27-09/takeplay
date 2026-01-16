@@ -18,6 +18,7 @@ import NotFound from "./pages/NotFound";
 import AdminMovies from "./pages/admin/Movies";
 import AdminUsers from "./pages/admin/Users";
 import MovieForm from "./pages/admin/MovieForm";
+import VideoApproval from "./pages/admin/VideoApproval";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +44,7 @@ const App = () => (
             <Route path="/admin/movies/new" element={<MovieForm />} />
             <Route path="/admin/movies/:id/edit" element={<MovieForm />} />
             <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/approval" element={<VideoApproval />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

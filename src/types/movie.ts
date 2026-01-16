@@ -1,5 +1,5 @@
 export type SubscriptionTier = 'free' | 'standard' | 'premium';
-export type MovieStatus = 'draft' | 'published';
+export type MovieStatus = 'draft' | 'pending_review' | 'published' | 'rejected';
 
 export interface Genre {
   id: string;

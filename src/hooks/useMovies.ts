@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import type { Movie, MovieWithGenres, Genre, MovieFormData } from '@/types/movie';
+import type { Movie, MovieWithGenres, Genre, MovieFormData, MovieStatus } from '@/types/movie';
 
 // Fetch all movies with their genres
 export function useMovies(includeUnpublished = false) {
@@ -187,33 +187,53 @@ export function useUpdateMovie() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ id, formData }: { id: string; formData: MovieFormData }) => {
-      const { genre_ids, ...movieData } = formData;
+    mutationFn: async (data: { id: string; formData?: MovieFormData; status?: MovieStatus }) => {
+      const { id, formData, status } = data;
       
-      // Update movie
-      const { data: movie, error: movieError } = await supabase
-        .from('movies')
-        .update(movieData)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (movieError) throw movieError;
-
-      // Delete existing movie_genres
-      await supabase.from('movie_genres').delete().eq('movie_id', id);
-
-      // Insert new movie_genres
-      if (genre_ids.length > 0) {
-        const movieGenres = genre_ids.map(genre_id => ({
-          movie_id: id,
-          genre_id,
-        }));
+      // If only updating status
+      if (status && !formData) {
+        const { data: movie, error } = await supabase
+          .from('movies')
+          .update({ status: status as any })
+          .eq('id', id)
+          .select()
+          .single();
         
-        await supabase.from('movie_genres').insert(movieGenres);
+        if (error) throw error;
+        return movie;
       }
+      
+      // Full update with formData
+      if (formData) {
+        const { genre_ids, ...movieData } = formData;
+        
+        // Update movie
+        const { data: movie, error: movieError } = await supabase
+          .from('movies')
+          .update(movieData)
+          .eq('id', id)
+          .select()
+          .single();
+        
+        if (movieError) throw movieError;
 
-      return movie;
+        // Delete existing movie_genres
+        await supabase.from('movie_genres').delete().eq('movie_id', id);
+
+        // Insert new movie_genres
+        if (genre_ids.length > 0) {
+          const movieGenres = genre_ids.map(genre_id => ({
+            movie_id: id,
+            genre_id,
+          }));
+          
+          await supabase.from('movie_genres').insert(movieGenres);
+        }
+
+        return movie;
+      }
+      
+      throw new Error('Either formData or status must be provided');
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['movies'] });

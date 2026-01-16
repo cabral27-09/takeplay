@@ -160,15 +160,23 @@ export default function AdminMovies() {
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={movie.status === 'published' ? 'default' : 'secondary'}
+                        variant={
+                          movie.status === 'published' ? 'default' : 
+                          movie.status === 'pending_review' ? 'secondary' :
+                          movie.status === 'rejected' ? 'destructive' : 'outline'
+                        }
                         className="flex items-center gap-1 w-fit"
                       >
                         {movie.status === 'published' ? (
                           <Eye className="h-3 w-3" />
+                        ) : movie.status === 'pending_review' ? (
+                          <Eye className="h-3 w-3" />
                         ) : (
                           <EyeOff className="h-3 w-3" />
                         )}
-                        {movie.status === 'published' ? 'Publicado' : 'Rascunho'}
+                        {movie.status === 'published' ? 'No Ar' : 
+                         movie.status === 'pending_review' ? 'Em Avaliação' :
+                         movie.status === 'rejected' ? 'Recusado' : 'Rascunho'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
