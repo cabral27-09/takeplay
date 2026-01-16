@@ -191,7 +191,7 @@ export type Database = {
     }
     Enums: {
       app_role: "viewer" | "producer" | "admin"
-      movie_status: "draft" | "published"
+      movie_status: "draft" | "published" | "pending_review" | "rejected"
       subscription_tier: "free" | "standard" | "premium"
     }
     CompositeTypes: {
@@ -321,7 +321,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["viewer", "producer", "admin"],
-      movie_status: ["draft", "published"],
+      movie_status: ["draft", "published", "pending_review", "rejected"],
       subscription_tier: ["free", "standard", "premium"],
     },
   },
