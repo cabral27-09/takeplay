@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Menu, X, LogIn, LogOut, User, Crown, Sparkles, Film } from 'lucide-react';
+import { Search, Menu, X, LogIn, LogOut, User, Crown, Sparkles, Film, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -148,6 +148,12 @@ return <Link to="/pricing" className={cn('hidden md:flex items-center gap-1.5 px
                       <DropdownMenuSeparator />
                       {roles.includes('admin') && (
                         <>
+                          <DropdownMenuItem asChild>
+                            <Link to="/admin/approval" className="cursor-pointer">
+                              <CheckCircle className="mr-2 h-4 w-4" />
+                              Aprovar Vídeos
+                            </Link>
+                          </DropdownMenuItem>
                           <DropdownMenuItem asChild>
                             <Link to="/admin/movies" className="cursor-pointer">
                               <Film className="mr-2 h-4 w-4" />
