@@ -20,6 +20,8 @@ import AdminMovies from "./pages/admin/Movies";
 import AdminUsers from "./pages/admin/Users";
 import MovieForm from "./pages/admin/MovieForm";
 import VideoApproval from "./pages/admin/VideoApproval";
+import ProducerMovies from "./pages/producer/Movies";
+import ProducerUploadMovie from "./pages/producer/UploadMovie";
 
 const queryClient = new QueryClient();
 
@@ -42,11 +44,16 @@ const App = () => (
             <Route path="/trailers" element={<Trailers />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/search" element={<Search />} />
+            {/* Admin routes */}
             <Route path="/admin/movies" element={<AdminMovies />} />
             <Route path="/admin/movies/new" element={<MovieForm />} />
             <Route path="/admin/movies/:id/edit" element={<MovieForm />} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/approval" element={<VideoApproval />} />
+            {/* Producer routes */}
+            <Route path="/producer/movies" element={<ProducerMovies />} />
+            <Route path="/producer/movies/new" element={<ProducerUploadMovie />} />
+            <Route path="/producer/movies/:id/edit" element={<ProducerUploadMovie />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
