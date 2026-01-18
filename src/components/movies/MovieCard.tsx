@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Play, Star } from 'lucide-react';
 import { MovieWithGenres } from '@/types/movie';
 import { cn } from '@/lib/utils';
+import { ShareButton } from '@/components/share/ShareButton';
 
 interface MovieCardProps {
   movie: MovieWithGenres;
@@ -42,6 +43,16 @@ export const MovieCard = ({ movie, index = 0, variant = 'default' }: MovieCardPr
 
         {/* Overlay Gradient */}
         <div className="absolute inset-0 bg-gradient-to-t from-cinema-black via-cinema-black/40 to-transparent opacity-80" />
+
+        {/* Share Button - Top Right */}
+        <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          <ShareButton 
+            movieId={movie.id} 
+            movieTitle={movie.title} 
+            variant="icon"
+            className="bg-black/50 hover:bg-black/70 backdrop-blur-sm"
+          />
+        </div>
 
         {/* Play Button Overlay */}
         <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">

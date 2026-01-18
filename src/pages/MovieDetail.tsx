@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { MovieRow } from '@/components/movies/MovieRow';
 import { useMovie, useMovies } from '@/hooks/useMovies';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ShareButton } from '@/components/share/ShareButton';
 
 const MovieDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -163,13 +164,19 @@ const MovieDetail = () => {
                 </div>
               )}
 
-              {/* Play Button */}
-              <Link to={`/watch/${movie.id}`}>
-                <Button size="xl" className="gap-3">
-                  <Play className="h-6 w-6 fill-current" />
-                  Assistir Agora
-                </Button>
-              </Link>
+              {/* Action Buttons */}
+              <div className="flex items-center gap-4">
+                <Link to={`/watch/${movie.id}`}>
+                  <Button size="xl" className="gap-3">
+                    <Play className="h-6 w-6 fill-current" />
+                    Assistir Agora
+                  </Button>
+                </Link>
+                <ShareButton 
+                  movieId={movie.id} 
+                  movieTitle={movie.title}
+                />
+              </div>
             </div>
           </motion.div>
         </div>

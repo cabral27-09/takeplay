@@ -10,7 +10,8 @@ import {
   SkipBack,
   SkipForward,
   ArrowLeft,
-  Clock
+  Clock,
+  Share2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -18,23 +19,30 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { ShareButton } from '@/components/share/ShareButton';
 
 interface VideoPlayerProps {
   src: string;
   poster?: string;
   title?: string;
+  movieId?: string;
   onBack?: () => void;
   previewMode?: boolean;
   previewDuration?: number; // in seconds
+  isSharePage?: boolean;
+  onPreviewEnd?: () => void;
 }
 
 export function VideoPlayer({ 
   src, 
   poster, 
   title, 
+  movieId,
   onBack,
   previewMode = false,
-  previewDuration = 60
+  previewDuration = 60,
+  isSharePage = false,
+  onPreviewEnd
 }: VideoPlayerProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -211,6 +219,11 @@ export function VideoPlayer({
     }
   };
 
+  const handleAuthRedirect = (mode: 'login' | 'signup') => {
+    const redirectUrl = movieId ? `/watch/${movieId}` : '/';
+    navigate(`/auth?redirect=${encodeURIComponent(redirectUrl)}`);
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
@@ -284,31 +297,53 @@ export function VideoPlayer({
                 </div>
               </div>
               <h2 className="text-2xl font-bold text-foreground mb-2">
-                Preview Encerrado
+                {isSharePage ? 'Gostou do que viu?' : 'Preview Encerrado'}
               </h2>
               <p className="text-muted-foreground mb-6">
-                {user 
-                  ? "Assine para continuar assistindo este filme completo."
-                  : "Faça login para assistir filmes gratuitos ou assine para acessar o catálogo completo."
+                {isSharePage 
+                  ? 'Crie sua conta ou faça login para assistir o filme completo!'
+                  : user 
+                    ? "Assine para continuar assistindo este filme completo."
+                    : "Faça login para assistir filmes gratuitos ou assine para acessar o catálogo completo."
                 }
               </p>
               <div className="flex flex-col gap-3">
-                {!user && (
-                  <Button 
-                    variant="outline" 
-                    className="w-full"
-                    onClick={() => navigate('/auth')}
-                  >
-                    Fazer Login
-                  </Button>
+                {isSharePage ? (
+                  <>
+                    <Button 
+                      className="w-full"
+                      onClick={() => handleAuthRedirect('signup')}
+                    >
+                      Criar Conta Grátis
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={() => handleAuthRedirect('login')}
+                    >
+                      Fazer Login
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {!user && (
+                      <Button 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={() => navigate('/auth')}
+                      >
+                        Fazer Login
+                      </Button>
+                    )}
+                    <Button 
+                      className="w-full"
+                      onClick={handleSubscribe}
+                      disabled={isCheckingOut}
+                    >
+                      {isCheckingOut ? "Processando..." : "Assinar Agora"}
+                    </Button>
+                  </>
                 )}
-                <Button 
-                  className="w-full"
-                  onClick={handleSubscribe}
-                  disabled={isCheckingOut}
-                >
-                  {isCheckingOut ? "Processando..." : "Assinar Agora"}
-                </Button>
                 <button
                   onClick={onBack || (() => navigate(-1))}
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -356,20 +391,31 @@ export function VideoPlayer({
             <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black/90 to-transparent" />
 
             {/* Top bar */}
-            <div className="absolute top-0 left-0 right-0 p-4 flex items-center gap-4 pointer-events-auto">
-              {onBack ? (
-                <Button variant="ghost" size="icon" onClick={onBack}>
-                  <ArrowLeft className="h-6 w-6" />
-                </Button>
-              ) : (
-                <Link to="/">
-                  <Button variant="ghost" size="icon">
+            <div className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between pointer-events-auto">
+              <div className="flex items-center gap-4">
+                {onBack ? (
+                  <Button variant="ghost" size="icon" onClick={onBack}>
                     <ArrowLeft className="h-6 w-6" />
                   </Button>
-                </Link>
-              )}
-              {title && (
-                <h1 className="text-lg font-semibold truncate">{title}</h1>
+                ) : (
+                  <Link to="/">
+                    <Button variant="ghost" size="icon">
+                      <ArrowLeft className="h-6 w-6" />
+                    </Button>
+                  </Link>
+                )}
+                {title && (
+                  <h1 className="text-lg font-semibold truncate">{title}</h1>
+                )}
+              </div>
+              
+              {/* Share button in top bar */}
+              {movieId && title && (
+                <ShareButton 
+                  movieId={movieId} 
+                  movieTitle={title} 
+                  variant="icon"
+                />
               )}
             </div>
 

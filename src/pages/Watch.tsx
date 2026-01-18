@@ -11,9 +11,10 @@ const PREVIEW_DURATION = 60; // 1 minute in seconds
 interface WatchContentProps {
   movie: MovieWithGenres;
   previewMode?: boolean;
+  movieId?: string;
 }
 
-const WatchContent = ({ movie, previewMode = false }: WatchContentProps) => {
+const WatchContent = ({ movie, previewMode = false, movieId }: WatchContentProps) => {
   const navigate = useNavigate();
 
   // If no video URL, show unavailable message
@@ -46,6 +47,7 @@ const WatchContent = ({ movie, previewMode = false }: WatchContentProps) => {
         src={movie.video_url}
         poster={movie.backdrop_url || undefined}
         title={movie.title}
+        movieId={movieId || movie.id}
         onBack={() => navigate(-1)}
         previewMode={previewMode}
         previewDuration={PREVIEW_DURATION}
@@ -85,7 +87,7 @@ const Watch = () => {
       movieTier={movie.min_tier as 'free' | 'standard' | 'premium'}
     >
       {(previewMode) => (
-        <WatchContent movie={movie} previewMode={previewMode} />
+        <WatchContent movie={movie} previewMode={previewMode} movieId={movie.id} />
       )}
     </SubscriptionGate>
   );
