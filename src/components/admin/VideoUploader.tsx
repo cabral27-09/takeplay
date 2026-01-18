@@ -142,12 +142,9 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
         setIsUploading(false);
         uploadRef.current = null;
         
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('videos')
-          .getPublicUrl(filePath);
-        
-        onChange(publicUrl);
+        // Store only the relative path (not the public URL)
+        // The signed URL will be generated on demand
+        onChange(filePath);
         toast({ title: 'Upload concluído', description: 'O vídeo foi enviado com sucesso.' });
       },
     });

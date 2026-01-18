@@ -67,10 +67,9 @@ const Share = () => {
   return (
     <div className="h-screen w-screen bg-cinema-black">
       <VideoPlayer 
-        src={movie.video_url}
+        movieId={movie.id}
         poster={movie.backdrop_url || undefined}
         title={movie.title}
-        movieId={movie.id}
         onBack={() => navigate('/')}
         previewMode={true}
         previewDuration={PREVIEW_DURATION}
