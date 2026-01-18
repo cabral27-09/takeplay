@@ -1,20 +1,22 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Play, Info, Star } from 'lucide-react';
-import { Movie } from '@/data/mockMovies';
+import { MovieWithGenres } from '@/types/movie';
 import { Button } from '@/components/ui/button';
 
 interface HeroSectionProps {
-  movie: Movie;
+  movie: MovieWithGenres;
 }
 
 export const HeroSection = ({ movie }: HeroSectionProps) => {
+  const backdrop = movie.backdrop_url || movie.thumbnail_url || '/placeholder.svg';
+
   return (
     <section className="relative h-[85vh] min-h-[600px] w-full overflow-hidden">
       {/* Background Image */}
       <div className="absolute inset-0">
         <img
-          src={movie.backdrop}
+          src={backdrop}
           alt={movie.title}
           className="h-full w-full object-cover"
         />
@@ -47,33 +49,41 @@ export const HeroSection = ({ movie }: HeroSectionProps) => {
 
             {/* Meta Info */}
             <div className="flex flex-wrap items-center gap-4 text-muted-foreground mb-6">
-              <span className="flex items-center gap-1.5">
-                <Star className="h-4 w-4 fill-primary text-primary" />
-                <span className="font-medium text-foreground">{movie.rating}</span>
-              </span>
-              <span>{movie.year}</span>
-              <span>{Math.floor(movie.duration / 60)}h {movie.duration % 60}min</span>
+              {movie.rating && (
+                <span className="flex items-center gap-1.5">
+                  <Star className="h-4 w-4 fill-primary text-primary" />
+                  <span className="font-medium text-foreground">{movie.rating}</span>
+                </span>
+              )}
+              {movie.year && <span>{movie.year}</span>}
+              {movie.duration && (
+                <span>{Math.floor(movie.duration / 60)}h {movie.duration % 60}min</span>
+              )}
               <div className="flex gap-2">
-                {movie.genre.map((g) => (
+                {movie.genres.map((g) => (
                   <span
-                    key={g}
+                    key={g.id}
                     className="px-2.5 py-0.5 rounded-full bg-secondary text-secondary-foreground text-sm"
                   >
-                    {g}
+                    {g.name}
                   </span>
                 ))}
               </div>
             </div>
 
             {/* Synopsis */}
-            <p className="text-lg text-muted-foreground leading-relaxed mb-8 max-w-xl">
-              {movie.synopsis}
-            </p>
+            {movie.synopsis && (
+              <p className="text-lg text-muted-foreground leading-relaxed mb-8 max-w-xl">
+                {movie.synopsis}
+              </p>
+            )}
 
             {/* Producer */}
-            <p className="text-sm text-muted-foreground mb-8">
-              Por <span className="text-foreground font-medium">{movie.producer.name}</span>
-            </p>
+            {movie.producer_name && (
+              <p className="text-sm text-muted-foreground mb-8">
+                Por <span className="text-foreground font-medium">{movie.producer_name}</span>
+              </p>
+            )}
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-4">

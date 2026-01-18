@@ -2,16 +2,21 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Layout } from '@/components/layout/Layout';
 import { MovieCard } from '@/components/movies/MovieCard';
-import { getPublishedMovies, genres } from '@/data/mockMovies';
+import { useMovies } from '@/hooks/useMovies';
+import { useGenres } from '@/hooks/useGenres';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const Browse = () => {
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
-  const allMovies = getPublishedMovies();
+  const { data: allMovies = [], isLoading: isLoadingMovies } = useMovies();
+  const { data: genres = [], isLoading: isLoadingGenres } = useGenres();
 
   const filteredMovies = selectedGenre
-    ? allMovies.filter(m => m.genre.includes(selectedGenre))
+    ? allMovies.filter(m => m.genres.some(g => g.name === selectedGenre))
     : allMovies;
+
+  const isLoading = isLoadingMovies || isLoadingGenres;
 
   return (
     <Layout>
@@ -68,14 +73,25 @@ const Browse = () => {
             ))}
           </motion.div>
 
-          {/* Movies Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
-            {filteredMovies.map((movie, index) => (
-              <MovieCard key={movie.id} movie={movie} index={index} />
-            ))}
-          </div>
+          {/* Loading State */}
+          {isLoading && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((i) => (
+                <Skeleton key={i} className="aspect-[2/3] rounded-xl" />
+              ))}
+            </div>
+          )}
 
-          {filteredMovies.length === 0 && (
+          {/* Movies Grid */}
+          {!isLoading && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
+              {filteredMovies.map((movie, index) => (
+                <MovieCard key={movie.id} movie={movie} index={index} />
+              ))}
+            </div>
+          )}
+
+          {!isLoading && filteredMovies.length === 0 && (
             <div className="text-center py-16">
               <p className="text-muted-foreground">
                 Nenhum filme encontrado nesta categoria
