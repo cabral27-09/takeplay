@@ -3,12 +3,13 @@ import { motion } from 'framer-motion';
 import { Search as SearchIcon, X } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { MovieCard } from '@/components/movies/MovieCard';
-import { getPublishedMovies } from '@/data/mockMovies';
+import { useMovies } from '@/hooks/useMovies';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const Search = () => {
   const [query, setQuery] = useState('');
-  const allMovies = getPublishedMovies();
+  const { data: allMovies = [], isLoading } = useMovies();
 
   const searchResults = useMemo(() => {
     if (!query.trim()) return [];
@@ -16,9 +17,9 @@ const Search = () => {
     const searchTerm = query.toLowerCase();
     return allMovies.filter(movie => 
       movie.title.toLowerCase().includes(searchTerm) ||
-      movie.synopsis.toLowerCase().includes(searchTerm) ||
-      movie.genre.some(g => g.toLowerCase().includes(searchTerm)) ||
-      movie.producer.name.toLowerCase().includes(searchTerm)
+      (movie.synopsis && movie.synopsis.toLowerCase().includes(searchTerm)) ||
+      movie.genres.some(g => g.name.toLowerCase().includes(searchTerm)) ||
+      (movie.producer_name && movie.producer_name.toLowerCase().includes(searchTerm))
     );
   }, [query, allMovies]);
 
@@ -61,8 +62,17 @@ const Search = () => {
             </div>
           </motion.div>
 
+          {/* Loading State */}
+          {isLoading && query.trim() && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <Skeleton key={i} className="aspect-[2/3] rounded-xl" />
+              ))}
+            </div>
+          )}
+
           {/* Results */}
-          {query.trim() && (
+          {!isLoading && query.trim() && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

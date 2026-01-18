@@ -1,23 +1,44 @@
 import { Layout } from '@/components/layout/Layout';
 import { HeroSection } from '@/components/home/HeroSection';
 import { MovieRow } from '@/components/movies/MovieRow';
-import { 
-  movies, 
-  genres,
-  getFeaturedMovies, 
-  getPublishedMovies 
-} from '@/data/mockMovies';
+import { useMovies, useFeaturedMovies } from '@/hooks/useMovies';
+import { useGenres } from '@/hooks/useGenres';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const Index = () => {
-  const featuredMovies = getFeaturedMovies();
-  const allMovies = getPublishedMovies();
+  const { data: allMovies = [], isLoading: isLoadingMovies } = useMovies();
+  const { data: featuredMovies = [], isLoading: isLoadingFeatured } = useFeaturedMovies();
+  const { data: genres = [] } = useGenres();
+
   const heroMovie = featuredMovies[0] || allMovies[0];
 
   // Group movies by genre
   const moviesByGenre = genres.map(genre => ({
     genre,
-    movies: allMovies.filter(m => m.genre.includes(genre.name))
+    movies: allMovies.filter(m => m.genres.some(g => g.name === genre.name))
   })).filter(g => g.movies.length > 0);
+
+  const isLoading = isLoadingMovies || isLoadingFeatured;
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="h-[85vh] min-h-[600px] bg-secondary animate-pulse" />
+        <div className="container py-8 space-y-8">
+          {[1, 2, 3].map((i) => (
+            <div key={i}>
+              <Skeleton className="h-8 w-48 mb-4" />
+              <div className="flex gap-4">
+                {[1, 2, 3, 4, 5].map((j) => (
+                  <Skeleton key={j} className="w-[200px] aspect-[2/3] rounded-xl" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -40,10 +61,12 @@ const Index = () => {
         )}
 
         {/* Trending */}
-        <MovieRow 
-          title="Populares Esta Semana" 
-          movies={allMovies.slice(0, 6)} 
-        />
+        {allMovies.length > 0 && (
+          <MovieRow 
+            title="Populares Esta Semana" 
+            movies={allMovies.slice(0, 6)} 
+          />
+        )}
 
         {/* Movies by Genre */}
         {moviesByGenre.slice(0, 4).map(({ genre, movies }) => (
@@ -55,10 +78,12 @@ const Index = () => {
         ))}
 
         {/* Recent Additions */}
-        <MovieRow 
-          title="Adicionados Recentemente" 
-          movies={[...allMovies].reverse().slice(0, 8)} 
-        />
+        {allMovies.length > 0 && (
+          <MovieRow 
+            title="Adicionados Recentemente" 
+            movies={[...allMovies].reverse().slice(0, 8)} 
+          />
+        )}
       </div>
     </Layout>
   );

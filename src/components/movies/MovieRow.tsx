@@ -1,13 +1,13 @@
 import { useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Movie } from '@/data/mockMovies';
+import { MovieWithGenres } from '@/types/movie';
 import { MovieCard } from './MovieCard';
 import { cn } from '@/lib/utils';
 
 interface MovieRowProps {
   title: string;
-  movies: Movie[];
+  movies: MovieWithGenres[];
   variant?: 'default' | 'featured' | 'compact';
 }
 
