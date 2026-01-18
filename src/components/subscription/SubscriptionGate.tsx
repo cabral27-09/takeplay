@@ -6,12 +6,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { toast } from "sonner";
 
+type MovieTier = 'free' | 'standard' | 'premium';
+type AccessType = 'full' | 'preview' | 'blocked';
+
 interface SubscriptionGateProps {
-  children: React.ReactNode;
+  children: React.ReactNode | ((previewMode: boolean) => React.ReactNode);
   movieTitle?: string;
+  movieTier?: MovieTier;
 }
 
-export function SubscriptionGate({ children, movieTitle }: SubscriptionGateProps) {
+// Tier hierarchy for comparison
+const TIER_LEVELS: Record<MovieTier, number> = {
+  free: 0,
+  standard: 1,
+  premium: 2,
+};
+
+export function SubscriptionGate({ children, movieTitle, movieTier = 'premium' }: SubscriptionGateProps) {
   const { user, subscription, isLoading } = useAuth();
   const navigate = useNavigate();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
@@ -55,6 +66,35 @@ export function SubscriptionGate({ children, movieTitle }: SubscriptionGateProps
     }
   };
 
+  // Determine access type based on user status, subscription, and movie tier
+  const getAccessType = (): AccessType => {
+    const movieLevel = TIER_LEVELS[movieTier];
+    
+    // User not logged in
+    if (!user) {
+      // Logged out + Free movie = preview (1 min)
+      if (movieLevel === 0) return 'preview';
+      // Logged out + Standard/Premium movie = blocked
+      return 'blocked';
+    }
+    
+    // User is logged in
+    // Logged in + Free movie = full access
+    if (movieLevel === 0) return 'full';
+    
+    // Logged in with subscription
+    if (subscription.subscribed) {
+      const userTierLevel = TIER_LEVELS[subscription.tier || 'free'];
+      // User's tier >= movie's tier = full access
+      if (userTierLevel >= movieLevel) return 'full';
+      // User's tier < movie's tier = preview (1 min)
+      return 'preview';
+    }
+    
+    // Logged in without subscription + Standard/Premium movie = preview (1 min)
+    return 'preview';
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-cinema-black">
@@ -63,12 +103,19 @@ export function SubscriptionGate({ children, movieTitle }: SubscriptionGateProps
     );
   }
 
-  // User is subscribed, show the content
-  if (subscription.subscribed) {
-    return <>{children}</>;
+  const accessType = getAccessType();
+
+  // Full access - show content without restrictions
+  if (accessType === 'full') {
+    return <>{typeof children === 'function' ? children(false) : children}</>;
   }
 
-  // Not subscribed, show subscription gate
+  // Preview access - show content with 1 minute limit
+  if (accessType === 'preview') {
+    return <>{typeof children === 'function' ? children(true) : children}</>;
+  }
+
+  // Blocked access - show subscription/login gate
   return (
     <div className="flex min-h-screen items-center justify-center bg-cinema-black p-4">
       <div className="relative max-w-lg w-full">
@@ -80,7 +127,7 @@ export function SubscriptionGate({ children, movieTitle }: SubscriptionGateProps
           <div className="flex justify-center mb-6">
             <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
               <Crown className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium text-primary">Conteúdo Premium</span>
+              <span className="text-sm font-medium text-primary">Conteúdo Exclusivo</span>
             </div>
           </div>
 
@@ -96,15 +143,15 @@ export function SubscriptionGate({ children, movieTitle }: SubscriptionGateProps
             {movieTitle ? `Assista "${movieTitle}"` : "Conteúdo Exclusivo"}
           </h2>
           <p className="text-muted-foreground mb-8">
-            Assine o TieFlix Premium para ter acesso ilimitado a todos os filmes completos da plataforma.
+            Este conteúdo requer uma conta. Faça login para acessar filmes gratuitos ou assine para o catálogo completo.
           </p>
 
           {/* Features */}
           <div className="grid gap-3 mb-8 text-left">
             {[
-              "Acesso ilimitado a todos os filmes",
-              "Qualidade HD e 4K",
-              "Novos lançamentos toda semana",
+              "Acesso a filmes gratuitos ao fazer login",
+              "Preview de 1 minuto para todos os filmes",
+              "Catálogo completo com assinatura",
               "Cancele quando quiser",
             ].map((feature, index) => (
               <div key={index} className="flex items-center gap-3">
@@ -114,23 +161,25 @@ export function SubscriptionGate({ children, movieTitle }: SubscriptionGateProps
             ))}
           </div>
 
-          {/* Price */}
-          <div className="mb-6">
-            <div className="flex items-baseline justify-center gap-1">
-              <span className="text-4xl font-bold text-foreground">R$ 19,90</span>
-              <span className="text-muted-foreground">/mês</span>
-            </div>
+          {/* CTA Buttons */}
+          <div className="flex flex-col gap-3">
+            <Button
+              onClick={() => navigate("/auth")}
+              variant="outline"
+              className="w-full h-12 text-lg"
+              size="lg"
+            >
+              Fazer Login
+            </Button>
+            <Button
+              onClick={handleSubscribe}
+              disabled={isCheckingOut}
+              className="w-full h-12 text-lg font-semibold"
+              size="lg"
+            >
+              {isCheckingOut ? "Processando..." : "Assinar Agora"}
+            </Button>
           </div>
-
-          {/* CTA Button */}
-          <Button
-            onClick={handleSubscribe}
-            disabled={isCheckingOut}
-            className="w-full h-12 text-lg font-semibold"
-            size="lg"
-          >
-            {isCheckingOut ? "Processando..." : user ? "Assinar Agora" : "Fazer Login para Assinar"}
-          </Button>
 
           {/* Back link */}
           <button
