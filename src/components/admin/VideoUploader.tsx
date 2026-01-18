@@ -2,7 +2,8 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Upload, X, Video } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Upload, X, Video, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface VideoUploaderProps {
@@ -14,17 +15,28 @@ interface VideoUploaderProps {
 export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<{ title: string; description: string } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{ name: string; size: number } | null>(null);
   const { toast } = useToast();
 
   const handleUpload = useCallback(async (file: File) => {
     if (!file) return;
 
+    // Store selected file info for display
+    setSelectedFile({ name: file.name, size: file.size });
+    setError(null);
+
     // Validate file type
     const validTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
     if (!validTypes.includes(file.type)) {
-      toast({
+      const errorInfo = {
         title: 'Formato inválido',
-        description: 'Apenas arquivos MP4, WebM ou MOV são aceitos.',
+        description: `O arquivo "${file.name}" não é um formato aceito. Use MP4, WebM ou MOV.`,
+      };
+      setError(errorInfo);
+      toast({
+        title: errorInfo.title,
+        description: errorInfo.description,
         variant: 'destructive',
       });
       return;
@@ -33,9 +45,14 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
     // Validate file size (5GB max)
     const maxSize = 5 * 1024 * 1024 * 1024;
     if (file.size > maxSize) {
-      toast({
+      const errorInfo = {
         title: 'Arquivo muito grande',
-        description: 'O tamanho máximo é 5GB.',
+        description: `O arquivo selecionado tem ${formatFileSize(file.size)}. O tamanho máximo permitido é 5GB.`,
+      };
+      setError(errorInfo);
+      toast({
+        title: errorInfo.title,
+        description: errorInfo.description,
         variant: 'destructive',
       });
       return;
@@ -95,10 +112,14 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
     if (file) {
       handleUpload(file);
     }
+    // Reset input to allow selecting the same file again
+    e.target.value = '';
   };
 
   const handleRemove = () => {
     onChange('');
+    setError(null);
+    setSelectedFile(null);
   };
 
   const formatFileSize = (bytes: number) => {
@@ -137,8 +158,9 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
       <label
         className={`
           flex flex-col items-center justify-center
-          rounded-lg border-2 border-dashed border-border
-          bg-card/50 p-8 cursor-pointer
+          rounded-lg border-2 border-dashed
+          ${error ? 'border-destructive bg-destructive/5' : 'border-border bg-card/50'}
+          p-8 cursor-pointer
           hover:bg-card hover:border-primary/50
           transition-colors
           ${isUploading || disabled ? 'opacity-50 cursor-not-allowed' : ''}
@@ -151,7 +173,7 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
           disabled={isUploading || disabled}
           className="sr-only"
         />
-        <Upload className="h-10 w-10 text-muted-foreground mb-3" />
+        <Upload className={`h-10 w-10 mb-3 ${error ? 'text-destructive' : 'text-muted-foreground'}`} />
         <p className="text-sm font-medium text-foreground">
           Clique para fazer upload
         </p>
@@ -159,6 +181,24 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
           MP4, WebM ou MOV (máx. 5GB)
         </p>
       </label>
+
+      {/* Selected file info */}
+      {selectedFile && !isUploading && !value && (
+        <div className={`flex items-center gap-2 text-sm ${error ? 'text-destructive' : 'text-muted-foreground'}`}>
+          <Video className="h-4 w-4" />
+          <span className="truncate flex-1">{selectedFile.name}</span>
+          <span className="font-medium">{formatFileSize(selectedFile.size)}</span>
+        </div>
+      )}
+
+      {/* Error alert */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>{error.title}</AlertTitle>
+          <AlertDescription>{error.description}</AlertDescription>
+        </Alert>
+      )}
 
       {isUploading && (
         <div className="space-y-2">
