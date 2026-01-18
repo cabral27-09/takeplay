@@ -9,20 +9,36 @@ import {
   Minimize,
   SkipBack,
   SkipForward,
-  ArrowLeft
+  ArrowLeft,
+  Clock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface VideoPlayerProps {
   src: string;
   poster?: string;
   title?: string;
   onBack?: () => void;
+  previewMode?: boolean;
+  previewDuration?: number; // in seconds
 }
 
-export function VideoPlayer({ src, poster, title, onBack }: VideoPlayerProps) {
+export function VideoPlayer({ 
+  src, 
+  poster, 
+  title, 
+  onBack,
+  previewMode = false,
+  previewDuration = 60
+}: VideoPlayerProps) {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -33,6 +49,8 @@ export function VideoPlayer({ src, poster, title, onBack }: VideoPlayerProps) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
+  const [previewEnded, setPreviewEnded] = useState(false);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
 
   const formatTime = (time: number) => {
@@ -61,7 +79,7 @@ export function VideoPlayer({ src, poster, title, onBack }: VideoPlayerProps) {
   }, [isPlaying]);
 
   const togglePlay = useCallback(() => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || previewEnded) return;
     
     if (isPlaying) {
       videoRef.current.pause();
@@ -69,7 +87,7 @@ export function VideoPlayer({ src, poster, title, onBack }: VideoPlayerProps) {
       videoRef.current.play();
     }
     setIsPlaying(!isPlaying);
-  }, [isPlaying]);
+  }, [isPlaying, previewEnded]);
 
   const toggleMute = useCallback(() => {
     if (!videoRef.current) return;
@@ -117,8 +135,17 @@ export function VideoPlayer({ src, poster, title, onBack }: VideoPlayerProps) {
     if (!video) return;
 
     const handleTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
-      setProgress((video.currentTime / video.duration) * 100);
+      const time = video.currentTime;
+      setCurrentTime(time);
+      setProgress((time / video.duration) * 100);
+      
+      // Check if preview should end
+      if (previewMode && time >= previewDuration && !previewEnded) {
+        video.pause();
+        setIsPlaying(false);
+        setPreviewEnded(true);
+        setShowControls(true);
+      }
     };
 
     const handleLoadedMetadata = () => {
@@ -145,7 +172,44 @@ export function VideoPlayer({ src, poster, title, onBack }: VideoPlayerProps) {
       video.removeEventListener('ended', handleEnded);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
-  }, []);
+  }, [previewMode, previewDuration, previewEnded]);
+
+  const handleSubscribe = async () => {
+    if (!user) {
+      navigate("/auth");
+      return;
+    }
+
+    setIsCheckingOut(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate("/auth");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) {
+        toast.error("Erro ao iniciar checkout");
+        console.error("Checkout error:", error);
+        return;
+      }
+
+      if (data?.url) {
+        window.open(data.url, "_blank");
+      }
+    } catch (error) {
+      toast.error("Erro ao processar assinatura");
+      console.error("Subscription error:", error);
+    } finally {
+      setIsCheckingOut(false);
+    }
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -183,7 +247,7 @@ export function VideoPlayer({ src, poster, title, onBack }: VideoPlayerProps) {
       ref={containerRef}
       className="relative w-full h-full bg-black group"
       onMouseMove={handleMouseMove}
-      onMouseLeave={() => isPlaying && setShowControls(false)}
+      onMouseLeave={() => isPlaying && !previewEnded && setShowControls(false)}
     >
       <video
         ref={videoRef}
@@ -194,9 +258,72 @@ export function VideoPlayer({ src, poster, title, onBack }: VideoPlayerProps) {
         playsInline
       />
 
+      {/* Preview Mode Badge */}
+      {previewMode && !previewEnded && (
+        <div className="absolute top-4 right-4 z-30">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/90 rounded-full text-primary-foreground text-sm font-medium">
+            <Clock className="h-4 w-4" />
+            <span>Preview: {formatTime(Math.max(0, previewDuration - currentTime))}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Ended Overlay */}
+      <AnimatePresence>
+        {previewEnded && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/90 flex items-center justify-center z-30"
+          >
+            <div className="text-center p-8 max-w-md">
+              <div className="flex justify-center mb-6">
+                <div className="p-4 rounded-full bg-primary/20">
+                  <Clock className="h-12 w-12 text-primary" />
+                </div>
+              </div>
+              <h2 className="text-2xl font-bold text-foreground mb-2">
+                Preview Encerrado
+              </h2>
+              <p className="text-muted-foreground mb-6">
+                {user 
+                  ? "Assine para continuar assistindo este filme completo."
+                  : "Faça login para assistir filmes gratuitos ou assine para acessar o catálogo completo."
+                }
+              </p>
+              <div className="flex flex-col gap-3">
+                {!user && (
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => navigate('/auth')}
+                  >
+                    Fazer Login
+                  </Button>
+                )}
+                <Button 
+                  className="w-full"
+                  onClick={handleSubscribe}
+                  disabled={isCheckingOut}
+                >
+                  {isCheckingOut ? "Processando..." : "Assinar Agora"}
+                </Button>
+                <button
+                  onClick={onBack || (() => navigate(-1))}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Voltar
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Play/Pause Overlay */}
       <AnimatePresence>
-        {!isPlaying && showControls && (
+        {!isPlaying && showControls && !previewEnded && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
