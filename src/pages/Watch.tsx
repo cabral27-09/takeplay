@@ -44,10 +44,9 @@ const WatchContent = ({ movie, previewMode = false, movieId }: WatchContentProps
   return (
     <div className="h-screen w-screen bg-cinema-black">
       <VideoPlayer 
-        src={movie.video_url}
+        movieId={movieId || movie.id}
         poster={movie.backdrop_url || undefined}
         title={movie.title}
-        movieId={movieId || movie.id}
         onBack={() => navigate(-1)}
         previewMode={previewMode}
         previewDuration={PREVIEW_DURATION}

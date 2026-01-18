@@ -11,7 +11,7 @@ import {
   SkipForward,
   ArrowLeft,
   Clock,
-  Share2
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -20,12 +20,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ShareButton } from '@/components/share/ShareButton';
+import { useVideoUrl } from '@/hooks/useVideoUrl';
 
 interface VideoPlayerProps {
-  src: string;
+  movieId: string;
   poster?: string;
   title?: string;
-  movieId?: string;
   onBack?: () => void;
   previewMode?: boolean;
   previewDuration?: number; // in seconds
@@ -34,10 +34,9 @@ interface VideoPlayerProps {
 }
 
 export function VideoPlayer({ 
-  src, 
+  movieId,
   poster, 
   title, 
-  movieId,
   onBack,
   previewMode = false,
   previewDuration = 60,
@@ -46,6 +45,12 @@ export function VideoPlayer({
 }: VideoPlayerProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  
+  // Fetch signed video URL
+  const { url: videoUrl, isLoading: isLoadingUrl, error: urlError } = useVideoUrl({
+    movieId,
+    isPreview: isSharePage || previewMode,
+  });
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -255,6 +260,33 @@ export function VideoPlayer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [togglePlay, toggleFullscreen, toggleMute, skip]);
 
+  // Show loading state while fetching URL
+  if (isLoadingUrl) {
+    return (
+      <div className="relative w-full h-full bg-black flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <p className="text-muted-foreground">Carregando vídeo...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (urlError && urlError !== 'subscription_required') {
+    return (
+      <div className="relative w-full h-full bg-black flex items-center justify-center">
+        <div className="text-center p-8 max-w-md">
+          <h2 className="text-xl font-semibold text-foreground mb-2">
+            Erro ao carregar vídeo
+          </h2>
+          <p className="text-muted-foreground mb-6">{urlError}</p>
+          <Button onClick={onBack || (() => navigate(-1))}>Voltar</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={containerRef}
@@ -264,11 +296,13 @@ export function VideoPlayer({
     >
       <video
         ref={videoRef}
-        src={src}
+        src={videoUrl || undefined}
         poster={poster}
         className="w-full h-full object-contain"
         onClick={togglePlay}
         playsInline
+        controlsList="nodownload"
+        onContextMenu={(e) => e.preventDefault()}
       />
 
       {/* Preview Mode Badge */}
