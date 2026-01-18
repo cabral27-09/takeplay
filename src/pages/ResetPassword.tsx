@@ -28,17 +28,53 @@ export default function ResetPassword() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if user has a valid recovery session
-    const checkSession = async () => {
+    const processRecoverySession = async () => {
+      // Check for code in URL params (PKCE flow - used by Supabase)
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      
+      if (code) {
+        try {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            console.error('Error exchanging code for session:', error);
+            setIsValidSession(false);
+            return;
+          }
+          if (data.session) {
+            setIsValidSession(true);
+            // Clean URL after processing
+            window.history.replaceState({}, '', '/reset-password');
+            return;
+          }
+        } catch (err) {
+          console.error('Exception during code exchange:', err);
+          setIsValidSession(false);
+          return;
+        }
+      }
+      
+      // Check for hash fragments (older flow)
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      
+      if (accessToken) {
+        // Let Supabase handle the hash automatically
+        const { data: { session } } = await supabase.auth.getSession();
+        setIsValidSession(!!session);
+        return;
+      }
+      
+      // Check for existing session
       const { data: { session } } = await supabase.auth.getSession();
       setIsValidSession(!!session);
     };
     
-    checkSession();
+    processRecoverySession();
 
-    // Listen for auth state changes (when user clicks the recovery link)
+    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
+      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
         setIsValidSession(true);
       }
     });
