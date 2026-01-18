@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Upload, X, Video, AlertCircle } from 'lucide-react';
+import { Upload, X, Video, AlertCircle, Pause, Play } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import * as tus from 'tus-js-client';
 
 interface VideoUploaderProps {
   value: string;
@@ -12,18 +13,24 @@ interface VideoUploaderProps {
   disabled?: boolean;
 }
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
 export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [uploadSpeed, setUploadSpeed] = useState<string>('');
   const [error, setError] = useState<{ title: string; description: string } | null>(null);
   const [selectedFile, setSelectedFile] = useState<{ name: string; size: number } | null>(null);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
   const { toast } = useToast();
+  
+  const uploadRef = useRef<tus.Upload | null>(null);
+  const lastProgressRef = useRef<{ bytes: number; time: number }>({ bytes: 0, time: Date.now() });
 
   const handleUpload = useCallback(async (file: File) => {
     if (!file) return;
 
-    // Store selected file info for display
     setSelectedFile({ name: file.name, size: file.size });
     setError(null);
 
@@ -35,132 +42,159 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
         description: `O arquivo "${file.name}" não é um formato aceito. Use MP4, WebM ou MOV.`,
       };
       setError(errorInfo);
-      toast({
-        title: errorInfo.title,
-        description: errorInfo.description,
-        variant: 'destructive',
-      });
+      toast({ ...errorInfo, variant: 'destructive' });
       return;
     }
 
-    // Validate file size (5GB max)
-    const maxSize = 5 * 1024 * 1024 * 1024;
+    // Validate file size (6GB max for Pro plan)
+    const maxSize = 6 * 1024 * 1024 * 1024;
     if (file.size > maxSize) {
       const fileSizeGB = file.size / (1024 * 1024 * 1024);
       const errorInfo = {
         title: 'Arquivo muito grande',
-        description: `O arquivo tem ${fileSizeGB.toFixed(2)}GB. O limite máximo é 5GB.`,
+        description: `O arquivo tem ${fileSizeGB.toFixed(2)}GB. O limite máximo é 6GB.`,
       };
       setError(errorInfo);
       setSelectedFile(null);
-      toast({
-        title: errorInfo.title,
-        description: errorInfo.description,
-        variant: 'destructive',
-      });
+      toast({ ...errorInfo, variant: 'destructive' });
+      return;
+    }
+
+    // Get session for auth
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      const errorInfo = {
+        title: 'Não autenticado',
+        description: 'Você precisa estar logado para fazer upload de vídeos.',
+      };
+      setError(errorInfo);
+      toast({ ...errorInfo, variant: 'destructive' });
       return;
     }
 
     setIsUploading(true);
     setProgress(0);
+    setIsPaused(false);
+    lastProgressRef.current = { bytes: 0, time: Date.now() };
 
-    const controller = new AbortController();
-    setAbortController(controller);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = `movies/${fileName}`;
 
-    let progressInterval: NodeJS.Timeout | null = null;
-
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `movies/${fileName}`;
-
-      // Simulate progress since Supabase doesn't provide upload progress
-      progressInterval = setInterval(() => {
-        setProgress(prev => Math.min(prev + 2, 90));
-      }, 1000);
-
-      // Create upload promise with timeout (10 minutes for large files)
-      const uploadPromise = supabase.storage
-        .from('videos')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false,
-        });
-
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        const timeoutId = setTimeout(() => {
-          reject(new Error('Upload timeout - o upload demorou mais de 10 minutos'));
-        }, 10 * 60 * 1000);
+    const upload = new tus.Upload(file, {
+      endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
+      retryDelays: [0, 1000, 3000, 5000, 10000],
+      headers: {
+        authorization: `Bearer ${session.access_token}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
+      metadata: {
+        bucketName: 'videos',
+        objectName: filePath,
+        contentType: file.type,
+        cacheControl: '3600',
+      },
+      chunkSize: 6 * 1024 * 1024, // 6MB chunks
+      onError: (err) => {
+        console.error('Upload error:', err);
+        setIsUploading(false);
+        setProgress(0);
+        uploadRef.current = null;
         
-        controller.signal.addEventListener('abort', () => {
-          clearTimeout(timeoutId);
-          reject(new Error('Upload cancelado pelo usuário'));
-        });
-      });
+        let errorMessage = 'Não foi possível enviar o vídeo.';
+        if (err.message?.includes('exceeded')) {
+          errorMessage = 'O arquivo excede o limite do servidor.';
+        } else if (err.message?.includes('network')) {
+          errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente.';
+        } else if (err.message) {
+          errorMessage = err.message;
+        }
+        
+        setError({ title: 'Erro no upload', description: errorMessage });
+        toast({ title: 'Erro no upload', description: errorMessage, variant: 'destructive' });
+      },
+      onProgress: (bytesUploaded, bytesTotal) => {
+        const percentage = Math.round((bytesUploaded / bytesTotal) * 100);
+        setProgress(percentage);
+        
+        // Calculate upload speed
+        const now = Date.now();
+        const timeDiff = (now - lastProgressRef.current.time) / 1000;
+        if (timeDiff >= 1) {
+          const bytesDiff = bytesUploaded - lastProgressRef.current.bytes;
+          const speed = bytesDiff / timeDiff;
+          
+          if (speed > 0) {
+            if (speed >= 1024 * 1024) {
+              setUploadSpeed(`${(speed / (1024 * 1024)).toFixed(1)} MB/s`);
+            } else {
+              setUploadSpeed(`${(speed / 1024).toFixed(0)} KB/s`);
+            }
+          }
+          
+          lastProgressRef.current = { bytes: bytesUploaded, time: now };
+        }
+      },
+      onSuccess: () => {
+        setProgress(100);
+        setIsUploading(false);
+        uploadRef.current = null;
+        
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('videos')
+          .getPublicUrl(filePath);
+        
+        onChange(publicUrl);
+        toast({ title: 'Upload concluído', description: 'O vídeo foi enviado com sucesso.' });
+      },
+    });
 
-      const { error: uploadError } = await Promise.race([uploadPromise, timeoutPromise]);
+    uploadRef.current = upload;
 
-      if (progressInterval) clearInterval(progressInterval);
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('videos')
-        .getPublicUrl(filePath);
-
-      setProgress(100);
-      onChange(publicUrl);
-
-      toast({
-        title: 'Upload concluído',
-        description: 'O vídeo foi enviado com sucesso.',
-      });
-    } catch (error: any) {
-      if (progressInterval) clearInterval(progressInterval);
-      console.error('Upload error:', error);
-      
-      let errorTitle = 'Erro no upload';
-      let errorMessage = 'Não foi possível enviar o vídeo.';
-      
-      if (error?.message?.includes('timeout')) {
-        errorMessage = 'O upload demorou demais. Verifique sua conexão ou tente um arquivo menor.';
-      } else if (error?.message?.includes('cancelado')) {
-        errorTitle = 'Upload cancelado';
-        errorMessage = 'O upload foi cancelado.';
-      } else if (error?.message?.includes('Payload too large') || error?.statusCode === 413) {
-        errorMessage = 'Arquivo muito grande para o servidor. O limite pode ser menor que 5GB. Tente compactar o vídeo.';
-      } else if (error?.message?.includes('exceeded the maximum allowed size')) {
-        errorMessage = 'O arquivo excede o limite do servidor. Tente compactar o vídeo ou usar um arquivo menor.';
-      } else if (error?.message) {
-        errorMessage = error.message;
+    // Check for previous uploads to resume
+    upload.findPreviousUploads().then((previousUploads) => {
+      if (previousUploads.length > 0) {
+        upload.resumeFromPreviousUpload(previousUploads[0]);
+        toast({ title: 'Retomando upload', description: 'Continuando de onde parou...' });
       }
-      
-      setError({ title: errorTitle, description: errorMessage });
-      toast({
-        title: errorTitle,
-        description: errorMessage,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsUploading(false);
-      setProgress(0);
-      setAbortController(null);
-    }
+      upload.start();
+    });
   }, [onChange, toast]);
 
-  const handleCancel = useCallback(() => {
-    if (abortController) {
-      abortController.abort();
+  const handlePauseResume = useCallback(() => {
+    if (!uploadRef.current) return;
+    
+    if (isPaused) {
+      uploadRef.current.start();
+      setIsPaused(false);
+      toast({ title: 'Upload retomado' });
+    } else {
+      uploadRef.current.abort();
+      setIsPaused(true);
+      toast({ title: 'Upload pausado', description: 'Clique em continuar quando quiser.' });
     }
-  }, [abortController]);
+  }, [isPaused, toast]);
+
+  const handleCancel = useCallback(() => {
+    if (uploadRef.current) {
+      uploadRef.current.abort();
+      uploadRef.current = null;
+    }
+    setIsUploading(false);
+    setProgress(0);
+    setIsPaused(false);
+    setSelectedFile(null);
+    toast({ title: 'Upload cancelado' });
+  }, [toast]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       handleUpload(file);
     }
-    // Reset input to allow selecting the same file again
     e.target.value = '';
   };
 
@@ -226,7 +260,7 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
           Clique para fazer upload
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          MP4, WebM ou MOV (máx. 5GB)
+          MP4, WebM ou MOV (máx. 6GB)
         </p>
       </label>
 
@@ -249,22 +283,57 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
       )}
 
       {isUploading && (
-        <div className="space-y-2">
+        <div className="space-y-3 p-4 rounded-lg border border-border bg-card">
+          <div className="flex items-center gap-2">
+            <Video className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium truncate flex-1">
+              {selectedFile?.name}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {selectedFile && formatFileSize(selectedFile.size)}
+            </span>
+          </div>
+          
           <Progress value={progress} className="h-2" />
+          
           <div className="flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
-              Enviando... {progress}%
-            </p>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleCancel}
-              className="h-6 text-xs text-destructive hover:text-destructive"
-            >
-              <X className="h-3 w-3 mr-1" />
-              Cancelar
-            </Button>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{progress}%</span>
+              {uploadSpeed && <span>• {uploadSpeed}</span>}
+              {isPaused && <span className="text-yellow-500">• Pausado</span>}
+            </div>
+            
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handlePauseResume}
+                className="h-7 px-2"
+              >
+                {isPaused ? (
+                  <>
+                    <Play className="h-3 w-3 mr-1" />
+                    Continuar
+                  </>
+                ) : (
+                  <>
+                    <Pause className="h-3 w-3 mr-1" />
+                    Pausar
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleCancel}
+                className="h-7 px-2 text-destructive hover:text-destructive"
+              >
+                <X className="h-3 w-3 mr-1" />
+                Cancelar
+              </Button>
+            </div>
           </div>
         </div>
       )}
