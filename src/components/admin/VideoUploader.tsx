@@ -17,6 +17,7 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<{ title: string; description: string } | null>(null);
   const [selectedFile, setSelectedFile] = useState<{ name: string; size: number } | null>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
   const { toast } = useToast();
 
   const handleUpload = useCallback(async (file: File) => {
@@ -45,11 +46,13 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
     // Validate file size (5GB max)
     const maxSize = 5 * 1024 * 1024 * 1024;
     if (file.size > maxSize) {
+      const fileSizeGB = file.size / (1024 * 1024 * 1024);
       const errorInfo = {
         title: 'Arquivo muito grande',
-        description: `O arquivo selecionado tem ${formatFileSize(file.size)}. O tamanho máximo permitido é 5GB.`,
+        description: `O arquivo tem ${fileSizeGB.toFixed(2)}GB. O limite máximo é 5GB.`,
       };
       setError(errorInfo);
+      setSelectedFile(null);
       toast({
         title: errorInfo.title,
         description: errorInfo.description,
@@ -61,24 +64,43 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
     setIsUploading(true);
     setProgress(0);
 
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    let progressInterval: NodeJS.Timeout | null = null;
+
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `movies/${fileName}`;
 
       // Simulate progress since Supabase doesn't provide upload progress
-      const progressInterval = setInterval(() => {
-        setProgress(prev => Math.min(prev + 10, 90));
-      }, 500);
+      progressInterval = setInterval(() => {
+        setProgress(prev => Math.min(prev + 2, 90));
+      }, 1000);
 
-      const { error: uploadError } = await supabase.storage
+      // Create upload promise with timeout (10 minutes for large files)
+      const uploadPromise = supabase.storage
         .from('videos')
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false,
         });
 
-      clearInterval(progressInterval);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error('Upload timeout - o upload demorou mais de 10 minutos'));
+        }, 10 * 60 * 1000);
+        
+        controller.signal.addEventListener('abort', () => {
+          clearTimeout(timeoutId);
+          reject(new Error('Upload cancelado pelo usuário'));
+        });
+      });
+
+      const { error: uploadError } = await Promise.race([uploadPromise, timeoutPromise]);
+
+      if (progressInterval) clearInterval(progressInterval);
 
       if (uploadError) throw uploadError;
 
@@ -94,18 +116,44 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
         title: 'Upload concluído',
         description: 'O vídeo foi enviado com sucesso.',
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (progressInterval) clearInterval(progressInterval);
       console.error('Upload error:', error);
+      
+      let errorTitle = 'Erro no upload';
+      let errorMessage = 'Não foi possível enviar o vídeo.';
+      
+      if (error?.message?.includes('timeout')) {
+        errorMessage = 'O upload demorou demais. Verifique sua conexão ou tente um arquivo menor.';
+      } else if (error?.message?.includes('cancelado')) {
+        errorTitle = 'Upload cancelado';
+        errorMessage = 'O upload foi cancelado.';
+      } else if (error?.message?.includes('Payload too large') || error?.statusCode === 413) {
+        errorMessage = 'Arquivo muito grande para o servidor. O limite pode ser menor que 5GB. Tente compactar o vídeo.';
+      } else if (error?.message?.includes('exceeded the maximum allowed size')) {
+        errorMessage = 'O arquivo excede o limite do servidor. Tente compactar o vídeo ou usar um arquivo menor.';
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      setError({ title: errorTitle, description: errorMessage });
       toast({
-        title: 'Erro no upload',
-        description: 'Não foi possível enviar o vídeo. Tente novamente.',
+        title: errorTitle,
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
       setIsUploading(false);
       setProgress(0);
+      setAbortController(null);
     }
   }, [onChange, toast]);
+
+  const handleCancel = useCallback(() => {
+    if (abortController) {
+      abortController.abort();
+    }
+  }, [abortController]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -203,9 +251,21 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
       {isUploading && (
         <div className="space-y-2">
           <Progress value={progress} className="h-2" />
-          <p className="text-xs text-muted-foreground text-center">
-            Enviando... {progress}%
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              Enviando... {progress}%
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleCancel}
+              className="h-6 text-xs text-destructive hover:text-destructive"
+            >
+              <X className="h-3 w-3 mr-1" />
+              Cancelar
+            </Button>
+          </div>
         </div>
       )}
     </div>
