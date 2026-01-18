@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,13 +35,17 @@ export default function Auth() {
   
   const { signIn, signUp, user, isLoading } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  
+  // Get redirect URL from query params (for share feature)
+  const redirectTo = searchParams.get('redirect') || '/';
 
   useEffect(() => {
     if (user && !isLoading) {
-      navigate('/');
+      navigate(redirectTo);
     }
-  }, [user, isLoading, navigate]);
+  }, [user, isLoading, navigate, redirectTo]);
 
   const validateForm = () => {
     try {
@@ -116,7 +120,7 @@ export default function Auth() {
           }
         } else {
           toast.success('Bem-vindo de volta!');
-          navigate('/');
+          navigate(redirectTo);
         }
       } else {
         const { error } = await signUp(email, password, fullName, role);
@@ -128,7 +132,7 @@ export default function Auth() {
           }
         } else {
           toast.success('Conta criada com sucesso!');
-          navigate('/');
+          navigate(redirectTo);
         }
       }
     } finally {
@@ -248,7 +252,7 @@ export default function Auth() {
                       const { error } = await supabase.auth.signInWithOAuth({
                         provider: 'google',
                         options: {
-                          redirectTo: `${window.location.origin}/`,
+                          redirectTo: `${window.location.origin}${redirectTo}`,
                         },
                       });
                       if (error) {

@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import MovieDetail from "./pages/MovieDetail";
 import Watch from "./pages/Watch";
+import Share from "./pages/Share";
 import Browse from "./pages/Browse";
 import Genres from "./pages/Genres";
 import Search from "./pages/Search";
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/movie/:id" element={<MovieDetail />} />
             <Route path="/watch/:id" element={<Watch />} />
+            <Route path="/share/:id" element={<Share />} />
             <Route path="/browse" element={<Browse />} />
             <Route path="/genres" element={<Genres />} />
             <Route path="/trailers" element={<Trailers />} />
