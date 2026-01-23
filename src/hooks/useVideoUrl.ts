@@ -31,21 +31,9 @@ export function useVideoUrl({ movieId, isPreview = false }: UseVideoUrlOptions):
     setError(null);
 
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-
-      // Add auth header if user is logged in
-      if (user) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          headers['Authorization'] = `Bearer ${session.access_token}`;
-        }
-      }
-
+      // SDK handles auth headers and JSON serialization automatically
       const { data, error: fnError } = await supabase.functions.invoke('get-video-url', {
         body: { movieId, isPreview },
-        headers,
       });
 
       if (fnError) {
@@ -85,7 +73,7 @@ export function useVideoUrl({ movieId, isPreview = false }: UseVideoUrlOptions):
     } finally {
       setIsLoading(false);
     }
-  }, [movieId, isPreview, user]);
+  }, [movieId, isPreview]);
 
   useEffect(() => {
     fetchUrl();
