@@ -46,9 +46,6 @@ export function VideoPlayer({
   const navigate = useNavigate();
   const { user } = useAuth();
   
-  // Debug log for preview mode
-  console.log('[VideoPlayer] Props:', { movieId, previewMode, previewDuration, isSharePage });
-  
   // Fetch signed video URL
   const { url: videoUrl, isLoading: isLoadingUrl, error: urlError } = useVideoUrl({
     movieId,
@@ -57,6 +54,10 @@ export function VideoPlayer({
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const rafIdRef = useRef<number | null>(null);
+  const lastTimeRef = useRef<number>(0);
+  const watchedSecondsRef = useRef<number>(0);
+  
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -67,9 +68,12 @@ export function VideoPlayer({
   const [volume, setVolume] = useState(1);
   const [previewEnded, setPreviewEnded] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [scrubValue, setScrubValue] = useState(0);
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
 
   const formatTime = (time: number) => {
+    if (!Number.isFinite(time) || time < 0) return '0:00';
     const hours = Math.floor(time / 3600);
     const minutes = Math.floor((time % 3600) / 60);
     const seconds = Math.floor(time % 60);
@@ -79,6 +83,75 @@ export function VideoPlayer({
     }
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
+
+  // Safe duration getter
+  const getSafeDuration = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return duration;
+    const d = video.duration;
+    if (Number.isFinite(d) && d > 0) return d;
+    return duration > 0 ? duration : 0;
+  }, [duration]);
+
+  // RAF-based time tracking loop - runs independently of timeupdate events
+  const startTimeLoop = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const tick = () => {
+      if (!videoRef.current) return;
+      
+      const v = videoRef.current;
+      const now = performance.now();
+      const deltaMs = now - lastTimeRef.current;
+      lastTimeRef.current = now;
+
+      // Update current time from video element directly
+      const t = v.currentTime;
+      setCurrentTime(t);
+
+      // Update duration if valid
+      const d = v.duration;
+      if (Number.isFinite(d) && d > 0) {
+        setDuration(d);
+        // Calculate progress safely
+        if (!isScrubbing) {
+          setProgress((t / d) * 100);
+        }
+      }
+
+      // Track watched seconds for preview mode (only while playing)
+      if (!v.paused && !v.ended && previewMode && !previewEnded) {
+        watchedSecondsRef.current += deltaMs / 1000;
+        
+        // Check preview limit based on watched time
+        if (watchedSecondsRef.current >= previewDuration) {
+          console.log('[VideoPlayer] Preview limit reached via watchedSeconds');
+          v.pause();
+          setIsPlaying(false);
+          setPreviewEnded(true);
+          setShowControls(true);
+          onPreviewEnd?.();
+          return; // Stop the loop
+        }
+      }
+
+      // Continue loop if playing
+      if (!v.paused && !v.ended) {
+        rafIdRef.current = requestAnimationFrame(tick);
+      }
+    };
+
+    lastTimeRef.current = performance.now();
+    rafIdRef.current = requestAnimationFrame(tick);
+  }, [previewMode, previewDuration, previewEnded, isScrubbing, onPreviewEnd]);
+
+  const stopTimeLoop = useCallback(() => {
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+  }, []);
 
   const handleMouseMove = useCallback(() => {
     setShowControls(true);
@@ -99,11 +172,13 @@ export function VideoPlayer({
     
     if (isPlaying) {
       videoRef.current.pause();
+      stopTimeLoop();
     } else {
       videoRef.current.play();
+      startTimeLoop();
     }
     setIsPlaying(!isPlaying);
-  }, [isPlaying, previewEnded]);
+  }, [isPlaying, previewEnded, startTimeLoop, stopTimeLoop]);
 
   const toggleMute = useCallback(() => {
     if (!videoRef.current) return;
@@ -133,65 +208,122 @@ export function VideoPlayer({
     setIsMuted(newVolume === 0);
   }, []);
 
+  // Handle scrubbing (visual only while dragging)
   const handleProgressChange = useCallback((value: number[]) => {
-    if (!videoRef.current) return;
-    const newTime = (value[0] / 100) * duration;
-    videoRef.current.currentTime = newTime;
+    setIsScrubbing(true);
+    setScrubValue(value[0]);
+    setProgress(value[0]);
+  }, []);
+
+  // Handle seek when user releases the slider
+  const handleProgressCommit = useCallback((value: number[]) => {
+    const video = videoRef.current;
+    if (!video) {
+      setIsScrubbing(false);
+      return;
+    }
+
+    const safeDuration = getSafeDuration();
+    if (safeDuration <= 0) {
+      console.warn('[VideoPlayer] Cannot seek: duration not available yet');
+      toast.error('Aguarde o vídeo carregar para avançar');
+      setIsScrubbing(false);
+      return;
+    }
+
+    const newTime = (value[0] / 100) * safeDuration;
+    console.log('[VideoPlayer] Seeking to:', newTime, 'duration:', safeDuration);
+    
+    video.currentTime = newTime;
     setCurrentTime(newTime);
     setProgress(value[0]);
-  }, [duration]);
+    setIsScrubbing(false);
+  }, [getSafeDuration]);
 
   const skip = useCallback((seconds: number) => {
-    if (!videoRef.current) return;
-    videoRef.current.currentTime = Math.max(0, Math.min(duration, videoRef.current.currentTime + seconds));
-  }, [duration]);
+    const video = videoRef.current;
+    if (!video) return;
+    
+    const safeDuration = getSafeDuration();
+    if (safeDuration <= 0) return;
+    
+    video.currentTime = Math.max(0, Math.min(safeDuration, video.currentTime + seconds));
+  }, [getSafeDuration]);
 
+  // Video event listeners
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const handleTimeUpdate = () => {
-      const time = video.currentTime;
-      console.log('[VideoPlayer] timeupdate:', { time, duration: video.duration, previewMode, previewDuration });
-      setCurrentTime(time);
-      setProgress((time / video.duration) * 100);
-      
-      // Check if preview should end
-      if (previewMode && time >= previewDuration && !previewEnded) {
-        console.log('[VideoPlayer] Preview limit reached, stopping video');
-        video.pause();
-        setIsPlaying(false);
-        setPreviewEnded(true);
-        setShowControls(true);
+    const handleLoadedMetadata = () => {
+      const d = video.duration;
+      console.log('[VideoPlayer] loadedmetadata - duration:', d);
+      if (Number.isFinite(d) && d > 0) {
+        setDuration(d);
       }
     };
 
-    const handleLoadedMetadata = () => {
-      console.log('[VideoPlayer] loadedmetadata - duration:', video.duration);
-      setDuration(video.duration);
+    const handleDurationChange = () => {
+      const d = video.duration;
+      console.log('[VideoPlayer] durationchange - duration:', d);
+      if (Number.isFinite(d) && d > 0) {
+        setDuration(d);
+      }
+    };
+
+    const handleCanPlay = () => {
+      const d = video.duration;
+      console.log('[VideoPlayer] canplay - duration:', d);
+      if (Number.isFinite(d) && d > 0) {
+        setDuration(d);
+      }
+    };
+
+    const handlePlay = () => {
+      setIsPlaying(true);
+      startTimeLoop();
+    };
+
+    const handlePause = () => {
+      setIsPlaying(false);
+      stopTimeLoop();
     };
 
     const handleEnded = () => {
       setIsPlaying(false);
       setShowControls(true);
+      stopTimeLoop();
     };
 
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
 
-    video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('durationchange', handleDurationChange);
+    video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
     video.addEventListener('ended', handleEnded);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
 
     return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('durationchange', handleDurationChange);
+      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
       video.removeEventListener('ended', handleEnded);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      stopTimeLoop();
     };
-  }, [previewMode, previewDuration, previewEnded]);
+  }, [startTimeLoop, stopTimeLoop]);
+
+  // Reset watched seconds when video URL changes
+  useEffect(() => {
+    watchedSecondsRef.current = 0;
+    setPreviewEnded(false);
+  }, [videoUrl]);
 
   const handleSubscribe = async () => {
     if (!user) {
@@ -235,6 +367,7 @@ export function VideoPlayer({
     navigate(`/auth?redirect=${encodeURIComponent(redirectUrl)}`);
   };
 
+  // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
@@ -293,6 +426,11 @@ export function VideoPlayer({
     );
   }
 
+  // Calculate preview remaining time
+  const previewRemaining = previewMode 
+    ? Math.max(0, previewDuration - watchedSecondsRef.current)
+    : 0;
+
   return (
     <div
       ref={containerRef}
@@ -304,6 +442,7 @@ export function VideoPlayer({
         ref={videoRef}
         src={videoUrl || undefined}
         poster={poster}
+        preload="metadata"
         className="w-full h-full object-contain"
         onClick={togglePlay}
         playsInline
@@ -311,9 +450,8 @@ export function VideoPlayer({
         onContextMenu={(e) => e.preventDefault()}
         onError={(e) => {
           const video = e.currentTarget;
-          console.error('Video error:', video.error?.message, video.error?.code);
+          console.error('[VideoPlayer] Video error:', video.error?.message, video.error?.code);
         }}
-        onCanPlay={() => console.log('Video can play')}
       />
 
       {/* Preview Mode Badge */}
@@ -321,7 +459,7 @@ export function VideoPlayer({
         <div className="absolute top-4 right-4 z-30">
           <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/90 rounded-full text-primary-foreground text-sm font-medium">
             <Clock className="h-4 w-4" />
-            <span>Preview: {formatTime(Math.max(0, previewDuration - currentTime))}</span>
+            <span>Preview: {formatTime(previewRemaining)}</span>
           </div>
         </div>
       )}
@@ -468,8 +606,9 @@ export function VideoPlayer({
             <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2 pointer-events-auto">
               {/* Progress bar */}
               <Slider
-                value={[progress]}
+                value={[isScrubbing ? scrubValue : progress]}
                 onValueChange={handleProgressChange}
+                onValueCommit={handleProgressCommit}
                 max={100}
                 step={0.1}
                 className="cursor-pointer"
