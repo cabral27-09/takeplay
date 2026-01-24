@@ -107,7 +107,7 @@ export const Header = () => {
               <span className="text-primary-foreground font-bold text-lg">T</span>
             </div>
             <span className="text-xl font-semibold tracking-tight text-foreground">
-              Tie<span className="text-primary">Flix</span>
+              Take<span className="text-primary">Play</span>
             </span>
           </motion.div>
         </Link>

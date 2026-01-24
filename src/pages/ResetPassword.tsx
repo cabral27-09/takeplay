@@ -206,7 +206,7 @@ export default function ResetPassword() {
             <span className="text-primary-foreground font-bold text-xl">T</span>
           </div>
           <span className="text-2xl font-bold">
-            Tie<span className="text-primary">Flix</span>
+            Take<span className="text-primary">Play</span>
           </span>
         </div>
 

@@ -181,7 +181,7 @@ export default function Auth() {
                 <span className="text-primary-foreground font-bold text-2xl">T</span>
               </div>
               <span className="text-3xl font-bold">
-                Tie<span className="text-primary">Flix</span>
+                Take<span className="text-primary">Play</span>
               </span>
             </div>
             <h1 className="text-4xl font-bold text-foreground mb-4">
@@ -205,13 +205,12 @@ export default function Auth() {
           transition={{ duration: 0.5 }}
           className="w-full max-w-md"
         >
-          {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2 mb-8 justify-center">
             <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
               <span className="text-primary-foreground font-bold text-xl">T</span>
             </div>
             <span className="text-2xl font-bold">
-              Tie<span className="text-primary">Flix</span>
+              Take<span className="text-primary">Play</span>
             </span>
           </div>
 
