@@ -1,6 +1,8 @@
 export type SubscriptionTier = 'free' | 'standard' | 'premium';
 export type MovieStatus = 'draft' | 'pending_review' | 'published' | 'rejected';
 export type ContentType = 'filme' | 'serie' | 'espetaculo';
+export type AgeRating = 'L' | '10' | '12' | '14' | '16' | '18';
+export type ContentLanguage = 'portugues' | 'ingles' | 'espanhol' | 'outro';
 
 export interface Genre {
   id: string;
@@ -31,6 +33,8 @@ export interface Movie {
   total_seasons: number | null;
   current_episode: number | null;
   season_number: number | null;
+  age_rating: AgeRating;
+  language: ContentLanguage;
   created_at: string;
   updated_at: string;
 }
@@ -67,4 +71,6 @@ export interface MovieFormData {
   total_seasons: number | null;
   current_episode: number | null;
   season_number: number | null;
+  age_rating: AgeRating;
+  language: ContentLanguage;
 }

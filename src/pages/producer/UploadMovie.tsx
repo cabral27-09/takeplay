@@ -16,7 +16,14 @@ import { useMovie, useCreateMovie, useUpdateMovie } from '@/hooks/useMovies';
 import { useGenres } from '@/hooks/useGenres';
 import { useToast } from '@/hooks/use-toast';
 import { Navigate, Link } from 'react-router-dom';
-import type { MovieFormData, MovieStatus } from '@/types/movie';
+import type { MovieFormData, MovieStatus, AgeRating, ContentLanguage } from '@/types/movie';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const STATUS_CONFIG: Record<MovieStatus, { label: string; icon: React.ComponentType<any>; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   draft: { label: 'Rascunho', icon: Film, variant: 'secondary' },
@@ -58,6 +65,8 @@ export default function ProducerUploadMovie() {
     total_seasons: null,
     current_episode: null,
     season_number: null,
+    age_rating: 'L',
+    language: 'portugues',
   });
 
   // Set producer name from profile
@@ -103,6 +112,8 @@ export default function ProducerUploadMovie() {
         total_seasons: movie.total_seasons,
         current_episode: movie.current_episode,
         season_number: movie.season_number,
+        age_rating: movie.age_rating || 'L',
+        language: movie.language || 'portugues',
       });
     }
   }, [movie, isEditing, navigate, toast]);
@@ -328,6 +339,48 @@ export default function ProducerUploadMovie() {
                     value={formData.duration}
                     onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="age_rating">Classificação Etária *</Label>
+                  <Select
+                    value={formData.age_rating}
+                    onValueChange={(value: AgeRating) => 
+                      setFormData(prev => ({ ...prev, age_rating: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="L">L - Livre para todos</SelectItem>
+                      <SelectItem value="10">10 - Não recomendado para menores de 10 anos</SelectItem>
+                      <SelectItem value="12">12 - Não recomendado para menores de 12 anos</SelectItem>
+                      <SelectItem value="14">14 - Não recomendado para menores de 14 anos</SelectItem>
+                      <SelectItem value="16">16 - Não recomendado para menores de 16 anos</SelectItem>
+                      <SelectItem value="18">18 - Não recomendado para menores de 18 anos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="language">Idioma do Áudio *</Label>
+                  <Select
+                    value={formData.language}
+                    onValueChange={(value: ContentLanguage) => 
+                      setFormData(prev => ({ ...prev, language: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="portugues">Português</SelectItem>
+                      <SelectItem value="ingles">Inglês</SelectItem>
+                      <SelectItem value="espanhol">Espanhol</SelectItem>
+                      <SelectItem value="outro">Outro</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
