@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import type { Movie, MovieWithGenres, Genre, MovieFormData, MovieStatus } from '@/types/movie';
+import type { Movie, MovieWithGenres, Genre, MovieFormData, MovieStatus, ContentType } from '@/types/movie';
 
 // Fetch all movies with their genres
 export function useMovies(includeUnpublished = false) {
@@ -50,6 +50,7 @@ export function useMovies(includeUnpublished = false) {
 
         return {
           ...movie,
+          content_type: (movie.content_type || 'filme') as ContentType,
           genres: movieGenresList,
         } as MovieWithGenres;
       });
@@ -98,6 +99,7 @@ export function useMovie(id: string | undefined) {
 
       return {
         ...movie,
+        content_type: (movie.content_type || 'filme') as ContentType,
         genres,
       } as MovieWithGenres;
     },
@@ -134,6 +136,7 @@ export function useFeaturedMovies() {
 
       return movies.map(movie => ({
         ...movie,
+        content_type: (movie.content_type || 'filme') as ContentType,
         genres: movieGenres
           ?.filter(mg => mg.movie_id === movie.id)
           .map(mg => genresMap.get(mg.genre_id))
