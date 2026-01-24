@@ -40,7 +40,11 @@ serve(async (req) => {
     }
     
     const customerId = customers.data[0].id;
-    const origin = req.headers.get("origin") || "http://localhost:3000";
+    
+    // Robust origin fallback
+    const origin = req.headers.get("origin") 
+      || req.headers.get("referer")?.split("/").slice(0, 3).join("/") 
+      || "https://takeplay.lovable.app";
     
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
