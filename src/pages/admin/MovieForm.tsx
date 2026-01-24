@@ -53,6 +53,11 @@ export default function MovieForm() {
     producer_name: '',
     producer_type: 'studio',
     genre_ids: [],
+    content_type: 'filme',
+    total_episodes: null,
+    total_seasons: null,
+    current_episode: null,
+    season_number: null,
   });
 
   // Load movie data for editing
@@ -74,6 +79,11 @@ export default function MovieForm() {
         producer_name: movie.producer_name || '',
         producer_type: movie.producer_type || 'studio',
         genre_ids: movie.genres.map(g => g.id),
+        content_type: movie.content_type || 'filme',
+        total_episodes: movie.total_episodes,
+        total_seasons: movie.total_seasons,
+        current_episode: movie.current_episode,
+        season_number: movie.season_number,
       });
     }
   }, [movie, isEditing]);

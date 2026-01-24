@@ -1,10 +1,12 @@
 export type SubscriptionTier = 'free' | 'standard' | 'premium';
 export type MovieStatus = 'draft' | 'pending_review' | 'published' | 'rejected';
+export type ContentType = 'filme' | 'serie' | 'espetaculo';
 
 export interface Genre {
   id: string;
   name: string;
   slug: string;
+  category?: string;
   created_at?: string;
 }
 
@@ -24,6 +26,11 @@ export interface Movie {
   trailer_url: string | null;
   producer_name: string | null;
   producer_type: string | null;
+  content_type: ContentType;
+  total_episodes: number | null;
+  total_seasons: number | null;
+  current_episode: number | null;
+  season_number: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -55,4 +62,9 @@ export interface MovieFormData {
   producer_name: string;
   producer_type: string;
   genre_ids: string[];
+  content_type: ContentType;
+  total_episodes: number | null;
+  total_seasons: number | null;
+  current_episode: number | null;
+  season_number: number | null;
 }

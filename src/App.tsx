@@ -9,6 +9,9 @@ import MovieDetail from "./pages/MovieDetail";
 import Watch from "./pages/Watch";
 import Share from "./pages/Share";
 import Browse from "./pages/Browse";
+import Filmes from "./pages/Filmes";
+import Series from "./pages/Series";
+import Espetaculo from "./pages/Espetaculo";
 import Genres from "./pages/Genres";
 import Search from "./pages/Search";
 import Auth from "./pages/Auth";
@@ -40,6 +43,9 @@ const App = () => (
             <Route path="/watch/:id" element={<Watch />} />
             <Route path="/share/:id" element={<Share />} />
             <Route path="/browse" element={<Browse />} />
+            <Route path="/filmes" element={<Filmes />} />
+            <Route path="/series" element={<Series />} />
+            <Route path="/espetaculo" element={<Espetaculo />} />
             <Route path="/genres" element={<Genres />} />
             <Route path="/trailers" element={<Trailers />} />
             <Route path="/pricing" element={<Pricing />} />

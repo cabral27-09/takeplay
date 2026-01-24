@@ -51,8 +51,13 @@ export default function ProducerUploadMovie() {
     video_url: '',
     trailer_url: '',
     producer_name: '',
-    producer_type: 'independent',
+    producer_type: 'individual',
     genre_ids: [],
+    content_type: 'filme',
+    total_episodes: null,
+    total_seasons: null,
+    current_episode: null,
+    season_number: null,
   });
 
   // Set producer name from profile
@@ -91,8 +96,13 @@ export default function ProducerUploadMovie() {
         video_url: movie.video_url || '',
         trailer_url: movie.trailer_url || '',
         producer_name: movie.producer_name || '',
-        producer_type: movie.producer_type || 'independent',
+        producer_type: movie.producer_type || 'individual',
         genre_ids: movie.genres.map(g => g.id),
+        content_type: movie.content_type || 'filme',
+        total_episodes: movie.total_episodes,
+        total_seasons: movie.total_seasons,
+        current_episode: movie.current_episode,
+        season_number: movie.season_number,
       });
     }
   }, [movie, isEditing, navigate, toast]);

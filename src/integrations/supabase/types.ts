@@ -16,18 +16,21 @@ export type Database = {
     Tables: {
       genres: {
         Row: {
+          category: string
           created_at: string
           id: string
           name: string
           slug: string
         }
         Insert: {
+          category?: string
           created_at?: string
           id?: string
           name: string
           slug: string
         }
         Update: {
+          category?: string
           created_at?: string
           id?: string
           name?: string
@@ -74,7 +77,9 @@ export type Database = {
       movies: {
         Row: {
           backdrop_url: string | null
+          content_type: Database["public"]["Enums"]["content_type"]
           created_at: string
+          current_episode: number | null
           duration: number | null
           featured: boolean
           id: string
@@ -82,10 +87,13 @@ export type Database = {
           producer_name: string | null
           producer_type: string | null
           rating: number | null
+          season_number: number | null
           status: Database["public"]["Enums"]["movie_status"]
           synopsis: string | null
           thumbnail_url: string | null
           title: string
+          total_episodes: number | null
+          total_seasons: number | null
           trailer_url: string | null
           updated_at: string
           video_url: string | null
@@ -93,7 +101,9 @@ export type Database = {
         }
         Insert: {
           backdrop_url?: string | null
+          content_type?: Database["public"]["Enums"]["content_type"]
           created_at?: string
+          current_episode?: number | null
           duration?: number | null
           featured?: boolean
           id?: string
@@ -101,10 +111,13 @@ export type Database = {
           producer_name?: string | null
           producer_type?: string | null
           rating?: number | null
+          season_number?: number | null
           status?: Database["public"]["Enums"]["movie_status"]
           synopsis?: string | null
           thumbnail_url?: string | null
           title: string
+          total_episodes?: number | null
+          total_seasons?: number | null
           trailer_url?: string | null
           updated_at?: string
           video_url?: string | null
@@ -112,7 +125,9 @@ export type Database = {
         }
         Update: {
           backdrop_url?: string | null
+          content_type?: Database["public"]["Enums"]["content_type"]
           created_at?: string
+          current_episode?: number | null
           duration?: number | null
           featured?: boolean
           id?: string
@@ -120,10 +135,13 @@ export type Database = {
           producer_name?: string | null
           producer_type?: string | null
           rating?: number | null
+          season_number?: number | null
           status?: Database["public"]["Enums"]["movie_status"]
           synopsis?: string | null
           thumbnail_url?: string | null
           title?: string
+          total_episodes?: number | null
+          total_seasons?: number | null
           trailer_url?: string | null
           updated_at?: string
           video_url?: string | null
@@ -191,6 +209,7 @@ export type Database = {
     }
     Enums: {
       app_role: "viewer" | "producer" | "admin"
+      content_type: "filme" | "serie" | "espetaculo"
       movie_status: "draft" | "published" | "pending_review" | "rejected"
       subscription_tier: "free" | "standard" | "premium"
     }
@@ -321,6 +340,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["viewer", "producer", "admin"],
+      content_type: ["filme", "serie", "espetaculo"],
       movie_status: ["draft", "published", "pending_review", "rejected"],
       subscription_tier: ["free", "standard", "premium"],
     },
