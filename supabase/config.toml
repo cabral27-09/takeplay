@@ -2,3 +2,12 @@ project_id = "frakvusemijynkcfsywj"
 
 [functions.get-video-url]
 verify_jwt = false
+
+[functions.create-producer-checkout]
+verify_jwt = false
+
+[functions.check-producer-purchase]
+verify_jwt = false
+
+[functions.record-producer-upload]
+verify_jwt = false

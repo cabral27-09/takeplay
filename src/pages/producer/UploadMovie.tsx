@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Save, Loader2, Clock, CheckCircle, XCircle, Film } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Clock, CheckCircle, XCircle, Film, Upload } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,9 +11,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { VideoUploader } from '@/components/admin/VideoUploader';
 import { ImageUploader } from '@/components/admin/ImageUploader';
+import { UploadGate } from '@/components/producer/UploadGate';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMovie, useCreateMovie, useUpdateMovie } from '@/hooks/useMovies';
 import { useGenresByContentType } from '@/hooks/useGenres';
+import { useProducerPurchase } from '@/hooks/useProducerPurchase';
 import { useToast } from '@/hooks/use-toast';
 import { Navigate, Link } from 'react-router-dom';
 import type { MovieFormData, MovieStatus, AgeRating, ContentLanguage, ContentType } from '@/types/movie';
@@ -41,6 +43,7 @@ export default function ProducerUploadMovie() {
   const { data: movie, isLoading: movieLoading } = useMovie(id);
   const createMovie = useCreateMovie();
   const updateMovie = useUpdateMovie();
+  const { purchaseInfo, recordUpload } = useProducerPurchase();
   const { toast } = useToast();
 
   const [formData, setFormData] = useState<MovieFormData>({
@@ -189,7 +192,14 @@ export default function ProducerUploadMovie() {
           description: 'Seu filme foi enviado para avaliação.',
         });
       } else {
-        await createMovie.mutateAsync(submitData);
+        // Create movie first
+        const newMovie = await createMovie.mutateAsync(submitData);
+        
+        // Record the upload to decrement quota
+        if (newMovie?.id) {
+          await recordUpload(newMovie.id);
+        }
+        
         toast({
           title: 'Filme enviado!',
           description: 'Seu filme foi enviado para avaliação. Você receberá uma notificação quando for aprovado.',
@@ -272,7 +282,8 @@ export default function ProducerUploadMovie() {
     );
   }
 
-  return (
+  // For new uploads, wrap with UploadGate
+  const content = (
     <Layout>
       <div className="container py-8 max-w-4xl">
         <motion.div
@@ -281,31 +292,40 @@ export default function ProducerUploadMovie() {
           className="space-y-6"
         >
           {/* Header */}
-          <div className="flex items-center gap-4">
-            <Link to="/producer/movies">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            </Link>
-            <div className="flex-1">
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold">
-                  {isEditing 
-                    ? `Editar ${formData.content_type === 'serie' ? 'Série' : formData.content_type === 'espetaculo' ? 'Espetáculo' : 'Filme'}`
-                    : `Enviar ${formData.content_type === 'serie' ? 'Nova Série' : formData.content_type === 'espetaculo' ? 'Novo Espetáculo' : 'Novo Filme'}`
-                  }
-                </h1>
-                {currentStatus && (
-                  <Badge variant={currentStatus.variant} className="gap-1">
-                    <currentStatus.icon className="h-3 w-3" />
-                    {currentStatus.label}
-                  </Badge>
-                )}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <Link to="/producer/movies">
+                <Button variant="ghost" size="icon">
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              </Link>
+              <div>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl font-bold">
+                    {isEditing 
+                      ? `Editar ${formData.content_type === 'serie' ? 'Série' : formData.content_type === 'espetaculo' ? 'Espetáculo' : 'Filme'}`
+                      : `Enviar ${formData.content_type === 'serie' ? 'Nova Série' : formData.content_type === 'espetaculo' ? 'Novo Espetáculo' : 'Novo Filme'}`
+                    }
+                  </h1>
+                  {currentStatus && (
+                    <Badge variant={currentStatus.variant} className="gap-1">
+                      <currentStatus.icon className="h-3 w-3" />
+                      {currentStatus.label}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-muted-foreground">
+                  Preencha os dados para enviar seu conteúdo para avaliação
+                </p>
               </div>
-              <p className="text-muted-foreground">
-                Preencha os dados para enviar seu conteúdo para avaliação
-              </p>
             </div>
+            {/* Show remaining uploads for new content */}
+            {!isEditing && purchaseInfo.hasActivePurchase && (
+              <Badge variant="outline" className="gap-1 text-sm">
+                <Upload className="h-3 w-3" />
+                {purchaseInfo.uploadsRemaining} uploads restantes
+              </Badge>
+            )}
           </div>
 
           {/* Rejection reason if applicable */}
@@ -659,4 +679,11 @@ export default function ProducerUploadMovie() {
       </div>
     </Layout>
   );
+
+  // For editing, show content directly; for new uploads, wrap with UploadGate
+  if (isEditing) {
+    return content;
+  }
+
+  return <UploadGate>{content}</UploadGate>;
 }
