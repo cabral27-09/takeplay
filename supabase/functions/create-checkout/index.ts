@@ -7,6 +7,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const logStep = (step: string, details?: any) => {
+  console.log(`[CREATE-CHECKOUT] ${step}`, details ? JSON.stringify(details) : '');
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -27,6 +31,13 @@ serve(async (req) => {
     // Get priceId from request body
     const { priceId } = await req.json().catch(() => ({}));
     if (!priceId) throw new Error("priceId is required");
+    logStep("Price ID received", { priceId });
+
+    // Robust origin fallback
+    const origin = req.headers.get("origin") 
+      || req.headers.get("referer")?.split("/").slice(0, 3).join("/") 
+      || "https://takeplay.lovable.app";
+    logStep("Origin determined", { origin });
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", { 
       apiVersion: "2025-08-27.basil" 
@@ -37,6 +48,7 @@ serve(async (req) => {
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
     }
+    logStep("Customer lookup complete", { customerId: customerId || 'new customer', email: user.email });
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -48,9 +60,10 @@ serve(async (req) => {
         },
       ],
       mode: "subscription",
-      success_url: `${req.headers.get("origin")}/pricing?success=true`,
-      cancel_url: `${req.headers.get("origin")}/pricing`,
+      success_url: `${origin}/pricing?success=true`,
+      cancel_url: `${origin}/pricing`,
     });
+    logStep("Checkout session created", { sessionId: session.id, url: session.url });
 
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
