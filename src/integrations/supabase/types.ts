@@ -76,6 +76,7 @@ export type Database = {
       }
       movies: {
         Row: {
+          age_rating: Database["public"]["Enums"]["age_rating"] | null
           backdrop_url: string | null
           content_type: Database["public"]["Enums"]["content_type"]
           created_at: string
@@ -83,6 +84,7 @@ export type Database = {
           duration: number | null
           featured: boolean
           id: string
+          language: Database["public"]["Enums"]["content_language"] | null
           min_tier: Database["public"]["Enums"]["subscription_tier"]
           producer_name: string | null
           producer_type: string | null
@@ -100,6 +102,7 @@ export type Database = {
           year: number | null
         }
         Insert: {
+          age_rating?: Database["public"]["Enums"]["age_rating"] | null
           backdrop_url?: string | null
           content_type?: Database["public"]["Enums"]["content_type"]
           created_at?: string
@@ -107,6 +110,7 @@ export type Database = {
           duration?: number | null
           featured?: boolean
           id?: string
+          language?: Database["public"]["Enums"]["content_language"] | null
           min_tier?: Database["public"]["Enums"]["subscription_tier"]
           producer_name?: string | null
           producer_type?: string | null
@@ -124,6 +128,7 @@ export type Database = {
           year?: number | null
         }
         Update: {
+          age_rating?: Database["public"]["Enums"]["age_rating"] | null
           backdrop_url?: string | null
           content_type?: Database["public"]["Enums"]["content_type"]
           created_at?: string
@@ -131,6 +136,7 @@ export type Database = {
           duration?: number | null
           featured?: boolean
           id?: string
+          language?: Database["public"]["Enums"]["content_language"] | null
           min_tier?: Database["public"]["Enums"]["subscription_tier"]
           producer_name?: string | null
           producer_type?: string | null
@@ -208,7 +214,9 @@ export type Database = {
       }
     }
     Enums: {
+      age_rating: "L" | "10" | "12" | "14" | "16" | "18"
       app_role: "viewer" | "producer" | "admin"
+      content_language: "portugues" | "ingles" | "espanhol" | "outro"
       content_type: "filme" | "serie" | "espetaculo"
       movie_status: "draft" | "published" | "pending_review" | "rejected"
       subscription_tier: "free" | "standard" | "premium"
@@ -339,7 +347,9 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      age_rating: ["L", "10", "12", "14", "16", "18"],
       app_role: ["viewer", "producer", "admin"],
+      content_language: ["portugues", "ingles", "espanhol", "outro"],
       content_type: ["filme", "serie", "espetaculo"],
       movie_status: ["draft", "published", "pending_review", "rejected"],
       subscription_tier: ["free", "standard", "premium"],
