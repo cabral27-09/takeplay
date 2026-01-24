@@ -155,6 +155,51 @@ export type Database = {
         }
         Relationships: []
       }
+      producer_purchases: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          is_active: boolean
+          product_id: string
+          purchased_at: string
+          stripe_payment_intent_id: string
+          tier: string
+          updated_at: string
+          uploads_allowed: number
+          uploads_used: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          is_active?: boolean
+          product_id: string
+          purchased_at?: string
+          stripe_payment_intent_id: string
+          tier: string
+          updated_at?: string
+          uploads_allowed: number
+          uploads_used?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          is_active?: boolean
+          product_id?: string
+          purchased_at?: string
+          stripe_payment_intent_id?: string
+          tier?: string
+          updated_at?: string
+          uploads_allowed?: number
+          uploads_used?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

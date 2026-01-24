@@ -25,6 +25,7 @@ import MovieForm from "./pages/admin/MovieForm";
 import VideoApproval from "./pages/admin/VideoApproval";
 import ProducerMovies from "./pages/producer/Movies";
 import ProducerUploadMovie from "./pages/producer/UploadMovie";
+import ProducerPricing from "./pages/producer/Pricing";
 
 const queryClient = new QueryClient();
 
@@ -60,6 +61,7 @@ const App = () => (
             <Route path="/producer/movies" element={<ProducerMovies />} />
             <Route path="/producer/movies/new" element={<ProducerUploadMovie />} />
             <Route path="/producer/movies/:id/edit" element={<ProducerUploadMovie />} />
+            <Route path="/producer/pricing" element={<ProducerPricing />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
