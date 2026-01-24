@@ -152,11 +152,13 @@ export function VideoPlayer({
 
     const handleTimeUpdate = () => {
       const time = video.currentTime;
+      console.log('[VideoPlayer] timeupdate:', { time, duration: video.duration, previewMode, previewDuration });
       setCurrentTime(time);
       setProgress((time / video.duration) * 100);
       
       // Check if preview should end
       if (previewMode && time >= previewDuration && !previewEnded) {
+        console.log('[VideoPlayer] Preview limit reached, stopping video');
         video.pause();
         setIsPlaying(false);
         setPreviewEnded(true);
@@ -165,6 +167,7 @@ export function VideoPlayer({
     };
 
     const handleLoadedMetadata = () => {
+      console.log('[VideoPlayer] loadedmetadata - duration:', video.duration);
       setDuration(video.duration);
     };
 
@@ -304,7 +307,6 @@ export function VideoPlayer({
         className="w-full h-full object-contain"
         onClick={togglePlay}
         playsInline
-        crossOrigin="anonymous"
         controlsList="nodownload"
         onContextMenu={(e) => e.preventDefault()}
         onError={(e) => {
