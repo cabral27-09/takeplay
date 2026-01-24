@@ -238,7 +238,13 @@ export function VideoPlayer({
     setCurrentTime(newTime);
     setProgress(value[0]);
     setIsScrubbing(false);
-  }, [getSafeDuration]);
+    
+    // Restart the time loop if video is playing (seek may have stopped it)
+    if (!video.paused && !video.ended) {
+      stopTimeLoop();
+      startTimeLoop();
+    }
+  }, [getSafeDuration, startTimeLoop, stopTimeLoop]);
 
   const skip = useCallback((seconds: number) => {
     const video = videoRef.current;
