@@ -69,14 +69,28 @@ Deno.serve(async (req) => {
     // Extract the video path from the URL or use it directly if it's already a path
     let videoPath = movie.video_url;
     
+    console.log(`Original video_url from database: ${movie.video_url}`);
+    
     // If it's a full URL, extract the path
-    if (videoPath.includes('/storage/v1/object/public/videos/')) {
-      videoPath = videoPath.split('/storage/v1/object/public/videos/')[1];
-    } else if (videoPath.includes('/storage/v1/object/sign/videos/')) {
-      videoPath = videoPath.split('/storage/v1/object/sign/videos/')[1].split('?')[0];
+    if (videoPath.startsWith('http')) {
+      const patterns = [
+        '/storage/v1/object/public/videos/',
+        '/storage/v1/object/sign/videos/',
+      ];
+      for (const pattern of patterns) {
+        if (videoPath.includes(pattern)) {
+          videoPath = videoPath.split(pattern)[1]?.split('?')[0] || videoPath;
+          break;
+        }
+      }
+    }
+    
+    // Remove leading slash if present
+    if (videoPath.startsWith('/')) {
+      videoPath = videoPath.substring(1);
     }
 
-    console.log(`Video path extracted: ${videoPath}`);
+    console.log(`Normalized video path for storage lookup: ${videoPath}`);
 
     // For preview mode (share page), allow access without auth
     if (isPreview) {
