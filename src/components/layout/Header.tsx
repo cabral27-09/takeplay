@@ -1,30 +1,36 @@
-import { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Menu, X, LogIn, LogOut, User, Crown, Sparkles, Film, CheckCircle, ChevronDown } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { SUBSCRIPTION_TIERS } from '@/lib/subscription-tiers';
+import { useState, useEffect } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Search, Menu, X, LogIn, LogOut, User, Crown, Sparkles, Film, CheckCircle, ChevronDown } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { SUBSCRIPTION_TIERS } from "@/lib/subscription-tiers";
 
 const filmesGenres = [
-  { name: 'Drama', slug: 'drama' },
-  { name: 'Documentário', slug: 'documentario' },
-  { name: 'Comédia', slug: 'comedia' },
-  { name: 'Romance', slug: 'romance' },
-  { name: 'Suspense', slug: 'suspense' },
-  { name: 'Ficção Científica', slug: 'ficcao-cientifica' },
-  { name: 'Animação', slug: 'animacao' },
-  { name: 'Terror', slug: 'terror' },
-  { name: 'Aventura', slug: 'aventura' },
+  { name: "Drama", slug: "drama" },
+  { name: "Documentário", slug: "documentario" },
+  { name: "Comédia", slug: "comedia" },
+  { name: "Romance", slug: "romance" },
+  { name: "Suspense", slug: "suspense" },
+  { name: "Ficção Científica", slug: "ficcao-cientifica" },
+  { name: "Animação", slug: "animacao" },
+  { name: "Terror", slug: "terror" },
+  { name: "Aventura", slug: "aventura" },
 ];
 
 const espetaculoGenres = [
-  { name: 'Teatro', slug: 'teatro' },
-  { name: 'Circo', slug: 'circo' },
-  { name: 'Musicais', slug: 'musicais' },
-  { name: 'Shows', slug: 'shows' },
+  { name: "Teatro", slug: "teatro" },
+  { name: "Circo", slug: "circo" },
+  { name: "Musicais", slug: "musicais" },
+  { name: "Shows", slug: "shows" },
 ];
 
 export const Header = () => {
@@ -32,21 +38,14 @@ export const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const {
-    user,
-    profile,
-    roles,
-    subscription,
-    signOut,
-    isLoading
-  } = useAuth();
+  const { user, profile, roles, subscription, signOut, isLoading } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 50);
     };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   useEffect(() => {
@@ -55,46 +54,48 @@ export const Header = () => {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/');
+    navigate("/");
   };
 
   const getRoleBadge = () => {
-    if (roles.includes('admin')) return 'Admin';
-    if (roles.includes('producer')) return 'Produtor';
-    return 'Espectador';
+    if (roles.includes("admin")) return "Admin";
+    if (roles.includes("producer")) return "Produtor";
+    return "Espectador";
   };
 
   const getPlanBadge = () => {
     const tier = subscription.tier;
     const tierInfo = SUBSCRIPTION_TIERS[tier];
-    if (tier === 'premium') {
+    if (tier === "premium") {
       return {
         label: tierInfo.name,
         icon: Crown,
-        className: 'bg-primary/20 text-primary border-primary/30'
+        className: "bg-primary/20 text-primary border-primary/30",
       };
     }
-    if (tier === 'standard') {
+    if (tier === "standard") {
       return {
         label: tierInfo.name,
         icon: Sparkles,
-        className: 'bg-accent/20 text-accent border-accent/30'
+        className: "bg-accent/20 text-accent border-accent/30",
       };
     }
     return {
       label: tierInfo.name,
       icon: null,
-      className: 'bg-muted text-muted-foreground border-border'
+      className: "bg-muted text-muted-foreground border-border",
     };
   };
 
   const isActiveRoute = (path: string) => location.pathname.startsWith(path);
 
   return (
-    <header className={cn(
-      'fixed top-0 left-0 right-0 z-50 transition-all duration-500',
-      isScrolled ? 'glass-dark border-b border-border/50' : 'bg-transparent'
-    )}>
+    <header
+      className={cn(
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-500",
+        isScrolled ? "glass-dark border-b border-border/50" : "bg-transparent",
+      )}
+    >
       <div className="container flex h-16 items-center justify-between md:h-20">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2">
@@ -118,8 +119,8 @@ export const Header = () => {
           <Link
             to="/"
             className={cn(
-              'text-sm font-medium transition-colors hover:text-primary',
-              location.pathname === '/' ? 'text-primary' : 'text-muted-foreground'
+              "text-sm font-medium transition-colors hover:text-primary",
+              location.pathname === "/" ? "text-primary" : "text-muted-foreground",
             )}
           >
             Início
@@ -127,10 +128,12 @@ export const Header = () => {
 
           {/* Filmes Dropdown */}
           <DropdownMenu>
-            <DropdownMenuTrigger className={cn(
-              'flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary',
-              isActiveRoute('/filmes') ? 'text-primary' : 'text-muted-foreground'
-            )}>
+            <DropdownMenuTrigger
+              className={cn(
+                "flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary",
+                isActiveRoute("/filmes") ? "text-primary" : "text-muted-foreground",
+              )}
+            >
               Filmes
               <ChevronDown className="h-4 w-4" />
             </DropdownMenuTrigger>
@@ -153,10 +156,12 @@ export const Header = () => {
 
           {/* Séries Dropdown */}
           <DropdownMenu>
-            <DropdownMenuTrigger className={cn(
-              'flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary',
-              isActiveRoute('/series') ? 'text-primary' : 'text-muted-foreground'
-            )}>
+            <DropdownMenuTrigger
+              className={cn(
+                "flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary",
+                isActiveRoute("/series") ? "text-primary" : "text-muted-foreground",
+              )}
+            >
               Séries
               <ChevronDown className="h-4 w-4" />
             </DropdownMenuTrigger>
@@ -179,10 +184,12 @@ export const Header = () => {
 
           {/* Espetáculo Dropdown */}
           <DropdownMenu>
-            <DropdownMenuTrigger className={cn(
-              'flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary',
-              isActiveRoute('/espetaculo') ? 'text-primary' : 'text-muted-foreground'
-            )}>
+            <DropdownMenuTrigger
+              className={cn(
+                "flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary",
+                isActiveRoute("/espetaculo") ? "text-primary" : "text-muted-foreground",
+              )}
+            >
               Espetáculo
               <ChevronDown className="h-4 w-4" />
             </DropdownMenuTrigger>
@@ -207,8 +214,8 @@ export const Header = () => {
           <Link
             to="/pricing"
             className={cn(
-              'text-sm font-medium transition-colors hover:text-primary',
-              location.pathname === '/pricing' ? 'text-primary' : 'text-muted-foreground'
+              "text-sm font-medium transition-colors hover:text-primary",
+              location.pathname === "/pricing" ? "text-primary" : "text-muted-foreground",
             )}
           >
             Planos
@@ -236,11 +243,11 @@ export const Header = () => {
                       <Link
                         to="/pricing"
                         className={cn(
-                          'hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors hover:opacity-80',
-                          planBadge.className
+                          "hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors hover:opacity-80",
+                          planBadge.className,
                         )}
                       >
-                        Plano Free
+                        Grátis
                         {planBadge.icon && <planBadge.icon className="h-3 w-3" />}
                       </Link>
                     );
@@ -254,21 +261,23 @@ export const Header = () => {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56 bg-popover border-border">
                       <div className="px-2 py-2">
-                        <p className="text-sm font-medium truncate">
-                          {profile?.full_name || user.email}
-                        </p>
+                        <p className="text-sm font-medium truncate">{profile?.full_name || user.email}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs text-muted-foreground">{getRoleBadge()}</span>
                           <span className="text-xs text-muted-foreground">•</span>
                           {(() => {
                             const planBadge = getPlanBadge();
                             return (
-                              <span className={cn(
-                                'text-xs font-medium',
-                                planBadge.className.includes('text-primary') ? 'text-primary' :
-                                planBadge.className.includes('text-accent') ? 'text-accent' :
-                                'text-muted-foreground'
-                              )}>
+                              <span
+                                className={cn(
+                                  "text-xs font-medium",
+                                  planBadge.className.includes("text-primary")
+                                    ? "text-primary"
+                                    : planBadge.className.includes("text-accent")
+                                      ? "text-accent"
+                                      : "text-muted-foreground",
+                                )}
+                              >
                                 {planBadge.label}
                               </span>
                             );
@@ -276,7 +285,7 @@ export const Header = () => {
                         </div>
                       </div>
                       <DropdownMenuSeparator />
-                      {roles.includes('producer') && (
+                      {roles.includes("producer") && (
                         <DropdownMenuItem asChild>
                           <Link to="/producer/movies" className="cursor-pointer">
                             <Film className="mr-2 h-4 w-4" />
@@ -284,7 +293,7 @@ export const Header = () => {
                           </Link>
                         </DropdownMenuItem>
                       )}
-                      {roles.includes('admin') && (
+                      {roles.includes("admin") && (
                         <>
                           <DropdownMenuItem asChild>
                             <Link to="/admin/approval" className="cursor-pointer">
@@ -321,12 +330,7 @@ export const Header = () => {
                   </DropdownMenu>
                 </div>
               ) : (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => navigate('/auth')}
-                  className="hidden md:flex"
-                >
+                <Button variant="default" size="sm" onClick={() => navigate("/auth")} className="hidden md:flex">
                   <LogIn className="mr-2 h-4 w-4" />
                   Entrar
                 </Button>
@@ -349,7 +353,7 @@ export const Header = () => {
         {isMobileMenuOpen && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
+            animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             className="glass-dark border-t border-border/50 md:hidden"
           >
@@ -357,13 +361,15 @@ export const Header = () => {
               <Link
                 to="/"
                 className={cn(
-                  'px-4 py-3 rounded-lg text-sm font-medium transition-colors',
-                  location.pathname === '/' ? 'bg-secondary text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                  "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                  location.pathname === "/"
+                    ? "bg-secondary text-primary"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground",
                 )}
               >
                 Início
               </Link>
-              
+
               {/* Mobile Filmes Section */}
               <div className="px-4 py-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Filmes</p>
@@ -424,8 +430,10 @@ export const Header = () => {
               <Link
                 to="/pricing"
                 className={cn(
-                  'px-4 py-3 rounded-lg text-sm font-medium transition-colors',
-                  location.pathname === '/pricing' ? 'bg-secondary text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                  "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                  location.pathname === "/pricing"
+                    ? "bg-secondary text-primary"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground",
                 )}
               >
                 Planos
