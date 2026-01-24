@@ -325,41 +325,9 @@ export function VideoPlayer({
     setPreviewEnded(false);
   }, [videoUrl]);
 
-  const handleSubscribe = async () => {
-    if (!user) {
-      navigate("/auth");
-      return;
-    }
-
-    setIsCheckingOut(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        navigate("/auth");
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) {
-        toast.error("Erro ao iniciar checkout");
-        console.error("Checkout error:", error);
-        return;
-      }
-
-      if (data?.url) {
-        window.open(data.url, "_blank");
-      }
-    } catch (error) {
-      toast.error("Erro ao processar assinatura");
-      console.error("Subscription error:", error);
-    } finally {
-      setIsCheckingOut(false);
-    }
+  const handleSubscribe = () => {
+    // Redirecionar para página de planos onde usuário pode escolher
+    navigate("/pricing");
   };
 
   const handleAuthRedirect = (mode: 'login' | 'signup') => {
