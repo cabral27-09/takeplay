@@ -301,8 +301,14 @@ export function VideoPlayer({
         className="w-full h-full object-contain"
         onClick={togglePlay}
         playsInline
+        crossOrigin="anonymous"
         controlsList="nodownload"
         onContextMenu={(e) => e.preventDefault()}
+        onError={(e) => {
+          const video = e.currentTarget;
+          console.error('Video error:', video.error?.message, video.error?.code);
+        }}
+        onCanPlay={() => console.log('Video can play')}
       />
 
       {/* Preview Mode Badge */}
