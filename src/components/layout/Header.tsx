@@ -17,6 +17,7 @@ const filmesGenres = [
   { name: 'Ficção Científica', slug: 'ficcao-cientifica' },
   { name: 'Animação', slug: 'animacao' },
   { name: 'Terror', slug: 'terror' },
+  { name: 'Aventura', slug: 'aventura' },
 ];
 
 const espetaculoGenres = [
