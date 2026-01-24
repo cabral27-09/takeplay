@@ -46,6 +46,9 @@ export function VideoPlayer({
   const navigate = useNavigate();
   const { user } = useAuth();
   
+  // Debug log for preview mode
+  console.log('[VideoPlayer] Props:', { movieId, previewMode, previewDuration, isSharePage });
+  
   // Fetch signed video URL
   const { url: videoUrl, isLoading: isLoadingUrl, error: urlError } = useVideoUrl({
     movieId,

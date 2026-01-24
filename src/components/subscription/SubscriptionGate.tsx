@@ -70,28 +70,48 @@ export function SubscriptionGate({ children, movieTitle, movieTier = 'premium' }
   const getAccessType = (): AccessType => {
     const movieLevel = TIER_LEVELS[movieTier];
     
+    console.log('[SubscriptionGate] Access check:', {
+      movieTier,
+      movieLevel,
+      userEmail: user?.email,
+      subscribed: subscription.subscribed,
+      subscriptionTier: subscription.tier,
+    });
+    
     // User not logged in
     if (!user) {
       // Logged out + Free movie = preview (1 min)
-      if (movieLevel === 0) return 'preview';
+      if (movieLevel === 0) {
+        console.log('[SubscriptionGate] Result: preview (logged out + free movie)');
+        return 'preview';
+      }
       // Logged out + Standard/Premium movie = blocked
+      console.log('[SubscriptionGate] Result: blocked (logged out + paid movie)');
       return 'blocked';
     }
     
     // User is logged in
     // Logged in + Free movie = full access
-    if (movieLevel === 0) return 'full';
+    if (movieLevel === 0) {
+      console.log('[SubscriptionGate] Result: full (logged in + free movie)');
+      return 'full';
+    }
     
     // Logged in with subscription
     if (subscription.subscribed) {
       const userTierLevel = TIER_LEVELS[subscription.tier || 'free'];
       // User's tier >= movie's tier = full access
-      if (userTierLevel >= movieLevel) return 'full';
+      if (userTierLevel >= movieLevel) {
+        console.log('[SubscriptionGate] Result: full (subscribed + sufficient tier)');
+        return 'full';
+      }
       // User's tier < movie's tier = preview (1 min)
+      console.log('[SubscriptionGate] Result: preview (subscribed but lower tier)');
       return 'preview';
     }
     
     // Logged in without subscription + Standard/Premium movie = preview (1 min)
+    console.log('[SubscriptionGate] Result: preview (logged in, no subscription, paid movie)');
     return 'preview';
   };
 
