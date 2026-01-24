@@ -68,7 +68,7 @@ export function VideoPlayer({
   const [volume, setVolume] = useState(1);
   const [previewEnded, setPreviewEnded] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
-  const [isScrubbing, setIsScrubbing] = useState(false);
+  const isScrubbingRef = useRef(false);
   const [scrubValue, setScrubValue] = useState(0);
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -115,7 +115,7 @@ export function VideoPlayer({
       if (Number.isFinite(d) && d > 0) {
         setDuration(d);
         // Calculate progress safely
-        if (!isScrubbing) {
+        if (!isScrubbingRef.current) {
           setProgress((t / d) * 100);
         }
       }
@@ -144,7 +144,7 @@ export function VideoPlayer({
 
     lastTimeRef.current = performance.now();
     rafIdRef.current = requestAnimationFrame(tick);
-  }, [previewMode, previewDuration, previewEnded, isScrubbing, onPreviewEnd]);
+  }, [previewMode, previewDuration, previewEnded, onPreviewEnd]);
 
   const stopTimeLoop = useCallback(() => {
     if (rafIdRef.current !== null) {
@@ -210,7 +210,7 @@ export function VideoPlayer({
 
   // Handle scrubbing (visual only while dragging)
   const handleProgressChange = useCallback((value: number[]) => {
-    setIsScrubbing(true);
+    isScrubbingRef.current = true;
     setScrubValue(value[0]);
     setProgress(value[0]);
   }, []);
@@ -219,7 +219,7 @@ export function VideoPlayer({
   const handleProgressCommit = useCallback((value: number[]) => {
     const video = videoRef.current;
     if (!video) {
-      setIsScrubbing(false);
+      isScrubbingRef.current = false;
       return;
     }
 
@@ -227,7 +227,7 @@ export function VideoPlayer({
     if (safeDuration <= 0) {
       console.warn('[VideoPlayer] Cannot seek: duration not available yet');
       toast.error('Aguarde o vídeo carregar para avançar');
-      setIsScrubbing(false);
+      isScrubbingRef.current = false;
       return;
     }
 
@@ -237,14 +237,9 @@ export function VideoPlayer({
     video.currentTime = newTime;
     setCurrentTime(newTime);
     setProgress(value[0]);
-    setIsScrubbing(false);
-    
-    // Restart the time loop if video is playing (seek may have stopped it)
-    if (!video.paused && !video.ended) {
-      stopTimeLoop();
-      startTimeLoop();
-    }
-  }, [getSafeDuration, startTimeLoop, stopTimeLoop]);
+    isScrubbingRef.current = false;
+    // Loop already running will now read the updated ref value
+  }, [getSafeDuration]);
 
   const skip = useCallback((seconds: number) => {
     const video = videoRef.current;
@@ -580,7 +575,7 @@ export function VideoPlayer({
             <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2 pointer-events-auto">
               {/* Progress bar */}
               <Slider
-                value={[isScrubbing ? scrubValue : progress]}
+                value={[isScrubbingRef.current ? scrubValue : progress]}
                 onValueChange={handleProgressChange}
                 onValueCommit={handleProgressCommit}
                 max={100}
