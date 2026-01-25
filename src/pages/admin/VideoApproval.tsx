@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Play, Check, X, Clock, Eye, Film, User } from 'lucide-react';
+import { ArrowLeft, Play, Check, X, Clock, Eye, Film, User, Tv, Theater } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,13 +36,19 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useMovies, useUpdateMovie } from '@/hooks/useMovies';
 import { useToast } from '@/hooks/use-toast';
 import { Navigate } from 'react-router-dom';
-import type { MovieStatus } from '@/types/movie';
+import type { MovieStatus, ContentType } from '@/types/movie';
 
 const STATUS_CONFIG: Record<MovieStatus, { label: string; icon: React.ElementType; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   draft: { label: 'Rascunho', icon: Film, variant: 'outline' },
   pending_review: { label: 'Aguardando Avaliação', icon: Clock, variant: 'secondary' },
   published: { label: 'No Ar', icon: Eye, variant: 'default' },
   rejected: { label: 'Recusado', icon: X, variant: 'destructive' },
+};
+
+const CONTENT_TYPE_CONFIG: Record<ContentType, { label: string; icon: React.ElementType }> = {
+  filme: { label: 'Filme', icon: Film },
+  serie: { label: 'Série', icon: Tv },
+  espetaculo: { label: 'Espetáculo', icon: Theater },
 };
 
 export default function VideoApproval() {
@@ -162,6 +168,7 @@ export default function VideoApproval() {
                   <TableRow>
                     <TableHead className="w-16"></TableHead>
                     <TableHead>Título</TableHead>
+                    <TableHead>Tipo</TableHead>
                     <TableHead>Produtor</TableHead>
                     <TableHead>Enviado em</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
@@ -170,7 +177,7 @@ export default function VideoApproval() {
                 <TableBody>
                   {pendingMovies.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-12">
+                      <TableCell colSpan={6} className="text-center py-12">
                         <Check className="h-12 w-12 mx-auto text-green-500 mb-3" />
                         <p className="text-muted-foreground">
                           Nenhum vídeo aguardando avaliação!
@@ -178,65 +185,83 @@ export default function VideoApproval() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    pendingMovies.map((movie) => (
-                      <TableRow key={movie.id}>
-                        <TableCell>
-                          {movie.thumbnail_url ? (
-                            <img
-                              src={movie.thumbnail_url}
-                              alt={movie.title}
-                              className="w-12 h-16 object-cover rounded"
-                            />
-                          ) : (
-                            <div className="w-12 h-16 bg-muted rounded flex items-center justify-center">
-                              <Film className="h-5 w-5 text-muted-foreground" />
+                    pendingMovies.map((movie) => {
+                      const contentTypeConfig = CONTENT_TYPE_CONFIG[movie.content_type as ContentType];
+                      const ContentTypeIcon = contentTypeConfig?.icon || Film;
+                      
+                      return (
+                        <TableRow key={movie.id}>
+                          <TableCell>
+                            {movie.thumbnail_url ? (
+                              <img
+                                src={movie.thumbnail_url}
+                                alt={movie.title}
+                                className="w-12 h-16 object-cover rounded"
+                              />
+                            ) : (
+                              <div className="w-12 h-16 bg-muted rounded flex items-center justify-center">
+                                <ContentTypeIcon className="h-5 w-5 text-muted-foreground" />
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{movie.title}</span>
+                              {movie.content_type === 'serie' && movie.total_seasons && (
+                                <span className="text-xs text-muted-foreground">
+                                  {movie.total_seasons} temp. {movie.total_episodes && `• ${movie.total_episodes} ep.`}
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-medium">{movie.title}</span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <span>{movie.producer_name || 'Desconhecido'}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {new Date(movie.updated_at).toLocaleDateString('pt-BR')}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setPreviewMovie(movie)}
-                            >
-                              <Play className="h-4 w-4 mr-1" />
-                              Avaliar
-                            </Button>
-                            <Button
-                              variant="default"
-                              size="sm"
-                              onClick={() => handleApprove(movie)}
-                              disabled={updateMovie.isPending}
-                            >
-                              <Check className="h-4 w-4 mr-1" />
-                              Aprovar
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => openRejectDialog(movie)}
-                              disabled={updateMovie.isPending}
-                            >
-                              <X className="h-4 w-4 mr-1" />
-                              Recusar
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="gap-1">
+                              <ContentTypeIcon className="h-3 w-3" />
+                              {contentTypeConfig?.label || movie.content_type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              <span>{movie.producer_name || 'Desconhecido'}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {new Date(movie.updated_at).toLocaleDateString('pt-BR')}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPreviewMovie(movie)}
+                              >
+                                <Play className="h-4 w-4 mr-1" />
+                                Avaliar
+                              </Button>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => handleApprove(movie)}
+                                disabled={updateMovie.isPending}
+                              >
+                                <Check className="h-4 w-4 mr-1" />
+                                Aprovar
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => openRejectDialog(movie)}
+                                disabled={updateMovie.isPending}
+                              >
+                                <X className="h-4 w-4 mr-1" />
+                                Recusar
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -254,6 +279,7 @@ export default function VideoApproval() {
                     <TableRow>
                       <TableHead className="w-16"></TableHead>
                       <TableHead>Título</TableHead>
+                      <TableHead>Tipo</TableHead>
                       <TableHead>Produtor</TableHead>
                       <TableHead>Status</TableHead>
                     </TableRow>
@@ -262,6 +288,9 @@ export default function VideoApproval() {
                     {recentlyReviewed.map((movie) => {
                       const statusConfig = STATUS_CONFIG[movie.status as MovieStatus];
                       const Icon = statusConfig?.icon || Film;
+                      const contentTypeConfig = CONTENT_TYPE_CONFIG[movie.content_type as ContentType];
+                      const ContentTypeIcon = contentTypeConfig?.icon || Film;
+                      
                       return (
                         <TableRow key={movie.id}>
                           <TableCell>
@@ -273,12 +302,25 @@ export default function VideoApproval() {
                               />
                             ) : (
                               <div className="w-12 h-16 bg-muted rounded flex items-center justify-center">
-                                <Film className="h-5 w-5 text-muted-foreground" />
+                                <ContentTypeIcon className="h-5 w-5 text-muted-foreground" />
                               </div>
                             )}
                           </TableCell>
                           <TableCell>
-                            <span className="font-medium">{movie.title}</span>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{movie.title}</span>
+                              {movie.content_type === 'serie' && movie.total_seasons && (
+                                <span className="text-xs text-muted-foreground">
+                                  {movie.total_seasons} temp. {movie.total_episodes && `• ${movie.total_episodes} ep.`}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="gap-1">
+                              <ContentTypeIcon className="h-3 w-3" />
+                              {contentTypeConfig?.label || movie.content_type}
+                            </Badge>
                           </TableCell>
                           <TableCell>{movie.producer_name || 'Desconhecido'}</TableCell>
                           <TableCell>

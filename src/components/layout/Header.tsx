@@ -304,7 +304,7 @@ export const Header = () => {
                           <DropdownMenuItem asChild>
                             <Link to="/admin/movies" className="cursor-pointer">
                               <Film className="mr-2 h-4 w-4" />
-                              Gerenciar Filmes
+                              Gerenciar Conteúdos
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild>
