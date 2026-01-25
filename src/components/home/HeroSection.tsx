@@ -87,10 +87,13 @@ export const HeroSection = ({ movie }: HeroSectionProps) => {
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-4">
-              <Link to={`/watch/${movie.id}`}>
+              <Link to={movie.content_type === 'serie' && !movie.series_id 
+                ? `/movie/${movie.id}` 
+                : `/watch/${movie.id}`
+              }>
                 <Button size="lg" className="gap-2 text-base px-8">
                   <Play className="h-5 w-5 fill-current" />
-                  Assistir
+                  {movie.content_type === 'serie' && !movie.series_id ? 'Ver Episódios' : 'Assistir'}
                 </Button>
               </Link>
               <Link to={`/movie/${movie.id}`}>
