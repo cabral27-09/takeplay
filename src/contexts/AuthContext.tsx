@@ -142,6 +142,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [checkSubscription]);
 
+  // Refresh subscription when tab becomes visible (returning from Stripe checkout)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && session) {
+        checkSubscription();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [session, checkSubscription]);
+
   const signUp = async (email: string, password: string, fullName: string, role: AppRole) => {
     const redirectUrl = `${window.location.origin}/`;
     
