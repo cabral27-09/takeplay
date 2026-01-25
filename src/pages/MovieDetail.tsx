@@ -1,12 +1,13 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Play, ArrowLeft, Star, Clock, Calendar, Film, User } from 'lucide-react';
+import { Play, ArrowLeft, Star, Clock, Calendar, Film, User, Tv } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { MovieRow } from '@/components/movies/MovieRow';
 import { useMovie, useMovies } from '@/hooks/useMovies';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ShareButton } from '@/components/share/ShareButton';
+import { SeasonEpisodeList } from '@/components/series/SeasonEpisodeList';
 
 const MovieDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -44,6 +45,9 @@ const MovieDetail = () => {
       </Layout>
     );
   }
+
+  // Check if this is a parent series (content_type === 'serie' and no series_id)
+  const isParentSeries = movie.content_type === 'serie' && !movie.series_id;
 
   // Get similar movies (same genre)
   const similarMovies = allMovies
@@ -120,10 +124,17 @@ const MovieDetail = () => {
                     {movie.year}
                   </span>
                 )}
-                {movie.duration && (
+                {!isParentSeries && movie.duration && (
                   <span className="flex items-center gap-1.5">
                     <Clock className="h-4 w-4" />
                     {Math.floor(movie.duration / 60)}h {movie.duration % 60}min
+                  </span>
+                )}
+                {isParentSeries && (
+                  <span className="flex items-center gap-1.5">
+                    <Tv className="h-4 w-4" />
+                    {movie.total_seasons && `${movie.total_seasons} Temporadas`}
+                    {movie.total_episodes && ` • ${movie.total_episodes} Episódios`}
                   </span>
                 )}
               </div>
@@ -164,23 +175,42 @@ const MovieDetail = () => {
                 </div>
               )}
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-4">
-                <Link to={`/watch/${movie.id}`}>
-                  <Button size="xl" className="gap-3">
-                    <Play className="h-6 w-6 fill-current" />
-                    Assistir Agora
-                  </Button>
-                </Link>
-                <ShareButton 
-                  movieId={movie.id} 
-                  movieTitle={movie.title}
-                />
-              </div>
+              {/* Action Buttons - Only show for non-series or episodes */}
+              {!isParentSeries && (
+                <div className="flex items-center gap-4">
+                  <Link to={`/watch/${movie.id}`}>
+                    <Button size="xl" className="gap-3">
+                      <Play className="h-6 w-6 fill-current" />
+                      Assistir Agora
+                    </Button>
+                  </Link>
+                  <ShareButton 
+                    movieId={movie.id} 
+                    movieTitle={movie.title}
+                  />
+                </div>
+              )}
+
+              {/* Share button for series */}
+              {isParentSeries && (
+                <div className="flex items-center gap-4">
+                  <ShareButton 
+                    movieId={movie.id} 
+                    movieTitle={movie.title}
+                  />
+                </div>
+              )}
             </div>
           </motion.div>
         </div>
       </section>
+
+      {/* Season & Episodes List for Series */}
+      {isParentSeries && (
+        <section className="container py-12">
+          <SeasonEpisodeList seriesId={movie.id} seriesTitle={movie.title} />
+        </section>
+      )}
 
       {/* Similar Movies */}
       {similarMovies.length > 0 && (

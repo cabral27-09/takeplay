@@ -126,6 +126,7 @@ export type Database = {
           producer_type: string | null
           rating: number | null
           season_number: number | null
+          series_id: string | null
           status: Database["public"]["Enums"]["movie_status"]
           synopsis: string | null
           thumbnail_url: string | null
@@ -152,6 +153,7 @@ export type Database = {
           producer_type?: string | null
           rating?: number | null
           season_number?: number | null
+          series_id?: string | null
           status?: Database["public"]["Enums"]["movie_status"]
           synopsis?: string | null
           thumbnail_url?: string | null
@@ -178,6 +180,7 @@ export type Database = {
           producer_type?: string | null
           rating?: number | null
           season_number?: number | null
+          series_id?: string | null
           status?: Database["public"]["Enums"]["movie_status"]
           synopsis?: string | null
           thumbnail_url?: string | null
@@ -189,7 +192,15 @@ export type Database = {
           video_url?: string | null
           year?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "movies_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "movies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       producer_purchases: {
         Row: {
