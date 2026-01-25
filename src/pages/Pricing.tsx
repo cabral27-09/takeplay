@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Layout } from '@/components/layout/Layout';
 import { PricingCard } from '@/components/pricing/PricingCard';
@@ -7,11 +7,26 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { SUBSCRIPTION_TIERS, SubscriptionTier } from '@/lib/subscription-tiers';
 import { toast } from 'sonner';
+import { PaymentSuccessModal } from '@/components/subscription/PaymentSuccessModal';
 
 export default function Pricing() {
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user, subscription, session } = useAuth();
+  const { user, subscription, session, checkSubscription } = useAuth();
+
+  // Handle success redirect from Stripe
+  useEffect(() => {
+    if (searchParams.get('success') === 'true') {
+      setShowSuccessModal(true);
+      checkSubscription(); // Refresh subscription status
+      
+      // Clean up URL
+      searchParams.delete('success');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, checkSubscription]);
 
   const handleSubscribe = async (priceId: string) => {
     if (!session) {
@@ -71,8 +86,19 @@ export default function Pricing() {
 
   const currentTier = subscription.tier || 'free';
 
+  const currentTierName = subscription.tier !== 'free' 
+    ? SUBSCRIPTION_TIERS[subscription.tier]?.name 
+    : undefined;
+
   return (
     <Layout>
+      {/* Payment Success Modal */}
+      <PaymentSuccessModal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        tierName={currentTierName}
+      />
+
       <div className="min-h-screen pt-24 pb-16">
         <div className="container max-w-6xl">
           {/* Header */}

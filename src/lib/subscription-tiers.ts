@@ -40,7 +40,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierInfo> = {
     name: 'Standard',
     price: 14.90,
     priceId: 'price_1StDcWCeLx1o0X2JEP36pI2f',
-    productId: 'prod_TeA9bWQ6uNkcqt',
+    productId: 'prod_TqvTi7txLYbgVK',
     description: 'Para quem quer mais',
     features: [
       'Tudo do plano Grátis',
@@ -53,7 +53,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierInfo> = {
     name: 'Premium',
     price: 19.90,
     priceId: 'price_1StDe5CeLx1o0X2JtcO3fVz2',
-    productId: 'prod_Te9cKVqbpz8YnY',
+    productId: 'prod_TqvVvRzOWJLsmS',
     description: 'A experiência completa',
     features: [
       'Tudo do plano Standard',
