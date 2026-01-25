@@ -148,37 +148,76 @@ Deno.serve(async (req) => {
     let hasAccess = true;
     
     if (movie.min_tier !== 'free') {
-      // Check Stripe subscription
-      const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+      hasAccess = false; // Default to no access for paid content
       
-      if (stripeKey && user.email) {
-        try {
-          // Import Stripe
-          const Stripe = (await import("https://esm.sh/stripe@14.21.0")).default;
-          const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+      // Tier hierarchy: free=0, standard=1, premium=2
+      const tierLevels: Record<string, number> = { free: 0, standard: 1, premium: 2 };
+      const movieTierLevel = tierLevels[movie.min_tier] || 0;
 
-          // Find customer by email
-          const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+      // FIRST: Check for admin-granted subscription (takes priority over Stripe)
+      const { data: adminSub, error: adminSubError } = await supabaseAdmin
+        .from('admin_subscriptions')
+        .select('tier, expires_at, is_active')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .single();
+
+      if (adminSub && !adminSubError) {
+        const isExpired = adminSub.expires_at && new Date(adminSub.expires_at) < new Date();
+        
+        if (!isExpired) {
+          const userTierLevel = tierLevels[adminSub.tier] || 0;
           
-          if (customers.data.length > 0) {
-            const customer = customers.data[0];
-            
-            // Check for active subscriptions
-            const subscriptions = await stripe.subscriptions.list({
-              customer: customer.id,
-              status: "active",
-              limit: 1,
-            });
-
-            hasAccess = subscriptions.data.length > 0;
-            console.log(`User subscription status: ${hasAccess ? 'active' : 'none'}`);
+          if (userTierLevel >= movieTierLevel) {
+            console.log(`Admin subscription grants access: ${adminSub.tier} >= ${movie.min_tier}`);
+            hasAccess = true;
           } else {
-            hasAccess = false;
-            console.log("No Stripe customer found for user");
+            console.log(`Admin tier ${adminSub.tier} insufficient for movie tier ${movie.min_tier}`);
           }
-        } catch (stripeError) {
-          console.error("Error checking Stripe subscription:", stripeError);
-          // Don't block access on Stripe errors, just log
+        } else {
+          console.log("Admin subscription expired");
+        }
+      } else {
+        console.log("No active admin subscription found, checking Stripe...");
+      }
+
+      // Only check Stripe if admin subscription didn't grant access
+      if (!hasAccess) {
+        const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+        
+        if (stripeKey && user.email) {
+          try {
+            // Import Stripe
+            const Stripe = (await import("https://esm.sh/stripe@14.21.0")).default;
+            const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+
+            // Find customer by email
+            const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+            
+            if (customers.data.length > 0) {
+              const customer = customers.data[0];
+              
+              // Check for active subscriptions
+              const subscriptions = await stripe.subscriptions.list({
+                customer: customer.id,
+                status: "active",
+                limit: 1,
+              });
+
+              if (subscriptions.data.length > 0) {
+                // Check the subscription tier from metadata or price
+                hasAccess = true;
+                console.log(`Stripe subscription grants access`);
+              } else {
+                console.log("No active Stripe subscription");
+              }
+            } else {
+              console.log("No Stripe customer found for user");
+            }
+          } catch (stripeError) {
+            console.error("Error checking Stripe subscription:", stripeError);
+            // Don't block access on Stripe errors, just log
+          }
         }
       }
     }
