@@ -69,6 +69,7 @@ export default function ProducerUploadMovie() {
     season_number: null,
     age_rating: 'L',
     language: 'portugues',
+    series_id: null,
   });
 
   // Fetch genres based on content type - must be after formData declaration
@@ -119,6 +120,7 @@ export default function ProducerUploadMovie() {
         season_number: movie.season_number,
         age_rating: movie.age_rating || 'L',
         language: movie.language || 'portugues',
+        series_id: movie.series_id || null,
       });
     }
   }, [movie, isEditing, navigate, toast]);

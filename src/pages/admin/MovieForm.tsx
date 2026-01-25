@@ -20,6 +20,7 @@ import { VideoUploader } from '@/components/admin/VideoUploader';
 import { ImageUploader } from '@/components/admin/ImageUploader';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMovie, useCreateMovie, useUpdateMovie } from '@/hooks/useMovies';
+import { useSeriesListAdmin } from '@/hooks/useSeriesEpisodes';
 import { useGenresByContentType } from '@/hooks/useGenres';
 import { useToast } from '@/hooks/use-toast';
 import { Navigate, Link } from 'react-router-dom';
@@ -59,10 +60,14 @@ export default function MovieForm() {
     season_number: null,
     age_rating: 'L',
     language: 'portugues',
+    series_id: null,
   });
 
   // Fetch genres based on content type - must be after formData declaration
   const { data: genres, isLoading: genresLoading } = useGenresByContentType(formData.content_type);
+  
+  // Fetch available series for linking episodes
+  const { data: seriesList, isLoading: seriesLoading } = useSeriesListAdmin();
 
   // Load movie data for editing
   useEffect(() => {
@@ -90,6 +95,7 @@ export default function MovieForm() {
         season_number: movie.season_number,
         age_rating: movie.age_rating || 'L',
         language: movie.language || 'portugues',
+        series_id: movie.series_id || null,
       });
     }
   }, [movie, isEditing]);
@@ -145,7 +151,7 @@ export default function MovieForm() {
     }));
   };
 
-  const isLoading = authLoading || (isEditing && movieLoading) || genresLoading;
+  const isLoading = authLoading || (isEditing && movieLoading) || genresLoading || seriesLoading;
   const isSaving = createMovie.isPending || updateMovie.isPending;
 
   if (isLoading) {
@@ -231,59 +237,96 @@ export default function MovieForm() {
                   Informações da Série
                 </h2>
                 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="total_seasons">Quantas temporadas tem a série?</Label>
-                    <Input
-                      id="total_seasons"
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={formData.total_seasons || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, total_seasons: parseInt(e.target.value) || null }))}
-                      placeholder="Ex: 3"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="season_number">Qual temporada é este vídeo?</Label>
-                    <Input
-                      id="season_number"
-                      type="number"
-                      min={1}
-                      max={formData.total_seasons || 100}
-                      value={formData.season_number || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, season_number: parseInt(e.target.value) || null }))}
-                      placeholder="Ex: 1"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="current_episode">Qual episódio?</Label>
-                    <Input
-                      id="current_episode"
-                      type="number"
-                      min={1}
-                      max={999}
-                      value={formData.current_episode || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, current_episode: parseInt(e.target.value) || null }))}
-                      placeholder="Ex: 1"
-                    />
-                  </div>
-
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="total_episodes">Total de episódios (opcional)</Label>
-                    <Input
-                      id="total_episodes"
-                      type="number"
-                      min={1}
-                      max={9999}
-                      value={formData.total_episodes || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, total_episodes: parseInt(e.target.value) || null }))}
-                      placeholder="Ex: 24"
-                    />
-                  </div>
+                {/* Series Parent Selector */}
+                <div className="space-y-2">
+                  <Label htmlFor="series_id">Vincular a uma Série Existente</Label>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Deixe vazio para criar uma nova série principal, ou selecione uma série para adicionar este conteúdo como episódio.
+                  </p>
+                  <Select
+                    value={formData.series_id || 'none'}
+                    onValueChange={(value) => 
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        series_id: value === 'none' ? null : value 
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="max-w-md">
+                      <SelectValue placeholder="Criar nova série (não vincular)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">➕ Criar nova série principal</SelectItem>
+                      {seriesList?.filter(s => s.id !== id).map((series) => (
+                        <SelectItem key={series.id} value={series.id}>
+                          {series.title} {series.status !== 'published' && `(${series.status})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                {/* Episode fields - only show when linking to a series */}
+                {formData.series_id && (
+                  <div className="grid gap-4 md:grid-cols-2 pt-4 border-t border-border/50">
+                    <div className="space-y-2">
+                      <Label htmlFor="season_number">Qual temporada é este episódio?</Label>
+                      <Input
+                        id="season_number"
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={formData.season_number || ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, season_number: parseInt(e.target.value) || null }))}
+                        placeholder="Ex: 1"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="current_episode">Qual episódio?</Label>
+                      <Input
+                        id="current_episode"
+                        type="number"
+                        min={1}
+                        max={999}
+                        value={formData.current_episode || ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, current_episode: parseInt(e.target.value) || null }))}
+                        placeholder="Ex: 1"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Series metadata - only show for parent series */}
+                {!formData.series_id && (
+                  <div className="grid gap-4 md:grid-cols-2 pt-4 border-t border-border/50">
+                    <div className="space-y-2">
+                      <Label htmlFor="total_seasons">Quantas temporadas tem a série?</Label>
+                      <Input
+                        id="total_seasons"
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={formData.total_seasons || ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, total_seasons: parseInt(e.target.value) || null }))}
+                        placeholder="Ex: 3"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="total_episodes">Total de episódios (opcional)</Label>
+                      <Input
+                        id="total_episodes"
+                        type="number"
+                        min={1}
+                        max={9999}
+                        value={formData.total_episodes || ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, total_episodes: parseInt(e.target.value) || null }))}
+                        placeholder="Ex: 24"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

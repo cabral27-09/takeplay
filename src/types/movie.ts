@@ -35,6 +35,7 @@ export interface Movie {
   season_number: number | null;
   age_rating: AgeRating;
   language: ContentLanguage;
+  series_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -73,4 +74,5 @@ export interface MovieFormData {
   season_number: number | null;
   age_rating: AgeRating;
   language: ContentLanguage;
+  series_id: string | null;
 }
