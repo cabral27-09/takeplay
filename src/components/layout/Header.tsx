@@ -247,7 +247,7 @@ export const Header = () => {
                           planBadge.className,
                         )}
                       >
-                        Grátis
+                        {planBadge.label}
                         {planBadge.icon && <planBadge.icon className="h-3 w-3" />}
                       </Link>
                     );
