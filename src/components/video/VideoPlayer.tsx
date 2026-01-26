@@ -21,6 +21,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ShareButton } from '@/components/share/ShareButton';
 import { useVideoUrl } from '@/hooks/useVideoUrl';
+import { useAirPlay } from '@/hooks/useAirPlay';
+import { useChromecast } from '@/hooks/useChromecast';
+import { CastButton } from './CastButton';
 
 interface VideoPlayerProps {
   movieId: string;
@@ -57,6 +60,10 @@ export function VideoPlayer({
   const rafIdRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
   const watchedSecondsRef = useRef<number>(0);
+  
+  // Casting hooks
+  const airplay = useAirPlay(videoRef);
+  const chromecast = useChromecast(videoRef);
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -627,6 +634,27 @@ export function VideoPlayer({
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Cast Button */}
+                  <CastButton
+                    airplayAvailable={airplay.isAvailable}
+                    airplayConnected={airplay.isConnected}
+                    chromecastAvailable={chromecast.isAvailable}
+                    chromecastConnected={chromecast.isConnected}
+                    chromecastDeviceName={chromecast.deviceName}
+                    onAirPlayClick={airplay.showPicker}
+                    onChromecastClick={() => {
+                      if (chromecast.isConnected) {
+                        chromecast.stopCasting();
+                      } else {
+                        chromecast.requestSession();
+                        // When session is established, start casting
+                        if (videoUrl && title) {
+                          chromecast.startCasting(videoUrl, title);
+                        }
+                      }
+                    }}
+                  />
+                  
                   <Button variant="ghost" size="icon" onClick={toggleFullscreen}>
                     {isFullscreen ? (
                       <Minimize className="h-5 w-5" />
