@@ -23,7 +23,7 @@ const TIER_LEVELS: Record<MovieTier, number> = {
 };
 
 export function SubscriptionGate({ children, movieTitle, movieTier = 'premium' }: SubscriptionGateProps) {
-  const { user, subscription, isLoading } = useAuth();
+  const { user, subscription, isLoading, isSubscriptionLoading } = useAuth();
   const navigate = useNavigate();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
 
@@ -115,7 +115,7 @@ export function SubscriptionGate({ children, movieTitle, movieTier = 'premium' }
     return 'preview';
   };
 
-  if (isLoading) {
+  if (isLoading || isSubscriptionLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-cinema-black">
         <div className="animate-pulse text-muted-foreground">Carregando...</div>

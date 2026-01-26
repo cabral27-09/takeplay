@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Layout } from '@/components/layout/Layout';
@@ -9,23 +9,58 @@ import { SUBSCRIPTION_TIERS, SubscriptionTier } from '@/lib/subscription-tiers';
 import { toast } from 'sonner';
 import { PaymentSuccessModal } from '@/components/subscription/PaymentSuccessModal';
 
+const MAX_SYNC_RETRIES = 5;
+const RETRY_DELAY_MS = 2000;
+
 export default function Pricing() {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [confirmedTierName, setConfirmedTierName] = useState<string | undefined>(undefined);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, subscription, session, checkSubscription } = useAuth();
+  const syncAttempted = useRef(false);
 
-  // Handle success redirect from Stripe
+  // Handle success redirect from Stripe with retry logic
   useEffect(() => {
-    if (searchParams.get('success') === 'true') {
-      setShowSuccessModal(true);
-      checkSubscription(); // Refresh subscription status
+    const handleSuccessReturn = async () => {
+      if (searchParams.get('success') !== 'true' || syncAttempted.current) return;
       
-      // Clean up URL
+      syncAttempted.current = true;
+      setIsSyncing(true);
+      setShowSuccessModal(true);
+      
+      // Clean up URL immediately
       searchParams.delete('success');
       setSearchParams(searchParams, { replace: true });
-    }
+
+      let retries = 0;
+      let syncedSubscription = await checkSubscription();
+
+      // Retry if still on 'free' tier (Stripe might not have processed yet)
+      while (syncedSubscription.tier === 'free' && retries < MAX_SYNC_RETRIES) {
+        retries++;
+        console.log(`[Pricing] Sync retry ${retries}/${MAX_SYNC_RETRIES}...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+        syncedSubscription = await checkSubscription();
+      }
+
+      if (syncedSubscription.tier !== 'free') {
+        const tierInfo = SUBSCRIPTION_TIERS[syncedSubscription.tier];
+        setConfirmedTierName(tierInfo?.name);
+        console.log('[Pricing] Subscription synced:', syncedSubscription.tier);
+      } else {
+        // Fallback if sync failed after retries
+        setConfirmedTierName(undefined);
+        console.warn('[Pricing] Subscription sync failed after retries');
+        toast.info('Sua assinatura está sendo processada. Pode levar alguns segundos.');
+      }
+
+      setIsSyncing(false);
+    };
+
+    handleSuccessReturn();
   }, [searchParams, setSearchParams, checkSubscription]);
 
   const handleSubscribe = async (priceId: string) => {
@@ -46,12 +81,12 @@ export default function Pricing() {
       if (error) throw error;
 
       if (data?.url) {
-        window.open(data.url, '_blank');
+        // Redirect in same tab for reliable sync on return
+        window.location.href = data.url;
       }
     } catch (error) {
       console.error('Checkout error:', error);
       toast.error('Erro ao iniciar checkout. Tente novamente.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -70,7 +105,7 @@ export default function Pricing() {
       if (error) throw error;
 
       if (data?.url) {
-        window.open(data.url, '_blank');
+        window.location.href = data.url;
       }
     } catch (error) {
       console.error('Portal error:', error);
@@ -86,17 +121,14 @@ export default function Pricing() {
 
   const currentTier = subscription.tier || 'free';
 
-  const currentTierName = subscription.tier !== 'free' 
-    ? SUBSCRIPTION_TIERS[subscription.tier]?.name 
-    : undefined;
-
   return (
     <Layout>
       {/* Payment Success Modal */}
       <PaymentSuccessModal
         isOpen={showSuccessModal}
         onClose={() => setShowSuccessModal(false)}
-        tierName={currentTierName}
+        tierName={confirmedTierName}
+        isLoading={isSyncing}
       />
 
       <div className="min-h-screen pt-24 pb-16">
