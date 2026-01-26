@@ -25,12 +25,13 @@ interface AuthContextType {
   profile: Profile | null;
   roles: AppRole[];
   isLoading: boolean;
+  isSubscriptionLoading: boolean;
   subscription: SubscriptionInfo;
   signUp: (email: string, password: string, fullName: string, role: AppRole) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   hasRole: (role: AppRole) => boolean;
-  checkSubscription: () => Promise<void>;
+  checkSubscription: () => Promise<SubscriptionInfo>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubscriptionLoading, setIsSubscriptionLoading] = useState(false);
   const [subscription, setSubscription] = useState<SubscriptionInfo>({
     subscribed: false,
     subscriptionEnd: null,
@@ -49,12 +51,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     adminGranted: false,
   });
 
-  const checkSubscription = useCallback(async () => {
+  const checkSubscription = useCallback(async (): Promise<SubscriptionInfo> => {
+    setIsSubscriptionLoading(true);
+    const defaultSub: SubscriptionInfo = { subscribed: false, subscriptionEnd: null, tier: 'free', productId: null, adminGranted: false };
+    
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        setSubscription({ subscribed: false, subscriptionEnd: null, tier: 'free', productId: null, adminGranted: false });
-        return;
+        setSubscription(defaultSub);
+        return defaultSub;
       }
 
       const { data, error } = await supabase.functions.invoke('check-subscription', {
@@ -65,34 +70,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error('Error checking subscription:', error);
-        return;
+        return defaultSub;
       }
+
+      let newSubscription: SubscriptionInfo;
 
       // Check if it's an admin-granted subscription (has tier directly)
       if (data?.admin_granted && data?.tier) {
-        setSubscription({
+        newSubscription = {
           subscribed: data.tier !== 'free',
           subscriptionEnd: data.subscription_end ?? null,
           tier: data.tier as SubscriptionTier,
           productId: null,
           adminGranted: true,
-        });
-        return;
+        };
+      } else {
+        // Otherwise, use Stripe-based subscription
+        const productId = data?.product_id ?? null;
+        const tier = getTierByProductId(productId);
+
+        newSubscription = {
+          subscribed: data?.subscribed ?? false,
+          subscriptionEnd: data?.subscription_end ?? null,
+          tier,
+          productId,
+          adminGranted: false,
+        };
       }
 
-      // Otherwise, use Stripe-based subscription
-      const productId = data?.product_id ?? null;
-      const tier = getTierByProductId(productId);
-
-      setSubscription({
-        subscribed: data?.subscribed ?? false,
-        subscriptionEnd: data?.subscription_end ?? null,
-        tier,
-        productId,
-        adminGranted: false,
-      });
+      setSubscription(newSubscription);
+      return newSubscription;
     } catch (error) {
       console.error('Error checking subscription:', error);
+      return defaultSub;
+    } finally {
+      setIsSubscriptionLoading(false);
     }
   }, []);
 
@@ -214,6 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         roles,
         isLoading,
+        isSubscriptionLoading,
         subscription,
         signUp,
         signIn,

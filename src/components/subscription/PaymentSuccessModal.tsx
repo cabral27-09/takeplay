@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, Sparkles, X } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { CheckCircle, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
   DialogContent,
@@ -14,19 +15,21 @@ interface PaymentSuccessModalProps {
   isOpen: boolean;
   onClose: () => void;
   tierName?: string;
+  isLoading?: boolean;
 }
 
-export function PaymentSuccessModal({ isOpen, onClose, tierName = 'Premium' }: PaymentSuccessModalProps) {
+export function PaymentSuccessModal({ isOpen, onClose, tierName, isLoading = false }: PaymentSuccessModalProps) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (isOpen) {
+    // Only auto-close after loading is complete
+    if (isOpen && !isLoading) {
       const timer = setTimeout(() => {
         onClose();
       }, 8000);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, isLoading]);
 
   const handleStartWatching = () => {
     onClose();
@@ -41,7 +44,7 @@ export function PaymentSuccessModal({ isOpen, onClose, tierName = 'Premium' }: P
         </DialogHeader>
         
         <div className="flex flex-col items-center text-center py-6">
-          {/* Animated Check Icon */}
+          {/* Animated Check Icon or Loading */}
           <motion.div
             initial={{ scale: 0, rotate: -180 }}
             animate={{ scale: 1, rotate: 0 }}
@@ -54,43 +57,69 @@ export function PaymentSuccessModal({ isOpen, onClose, tierName = 'Premium' }: P
             className="relative mb-6"
           >
             <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center">
-              <CheckCircle className="w-12 h-12 text-primary" />
+              {isLoading ? (
+                <Loader2 className="w-12 h-12 text-primary animate-spin" />
+              ) : (
+                <CheckCircle className="w-12 h-12 text-primary" />
+              )}
             </div>
             
-            {/* Sparkles animation */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.4 }}
-              className="absolute -top-2 -right-2"
-            >
-              <Sparkles className="w-6 h-6 text-primary" />
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0, scale: 0 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.5 }}
-              className="absolute -bottom-1 -left-3"
-            >
-              <Sparkles className="w-5 h-5 text-primary/70" />
-            </motion.div>
+            {/* Sparkles animation - only show when not loading */}
+            {!isLoading && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.4 }}
+                  className="absolute -top-2 -right-2"
+                >
+                  <Sparkles className="w-6 h-6 text-primary" />
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.5 }}
+                  className="absolute -bottom-1 -left-3"
+                >
+                  <Sparkles className="w-5 h-5 text-primary/70" />
+                </motion.div>
+              </>
+            )}
           </motion.div>
 
-          {/* Success Message */}
+          {/* Success Message with Loading State */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <h2 className="text-2xl font-bold text-foreground mb-2">
-              Pagamento Confirmado!
-            </h2>
-            <p className="text-muted-foreground mb-1">
-              Sua assinatura <span className="text-primary font-semibold">{tierName}</span> está ativa.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Aproveite o acesso completo ao catálogo.
-            </p>
+            {isLoading ? (
+              <>
+                <h2 className="text-2xl font-bold text-foreground mb-2">
+                  Confirmando Pagamento...
+                </h2>
+                <p className="text-muted-foreground mb-1">
+                  Sincronizando sua assinatura
+                </p>
+                <Skeleton className="h-4 w-32 mx-auto mt-2" />
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl font-bold text-foreground mb-2">
+                  Pagamento Confirmado!
+                </h2>
+                <p className="text-muted-foreground mb-1">
+                  {tierName ? (
+                    <>Sua assinatura <span className="text-primary font-semibold">{tierName}</span> está ativa.</>
+                  ) : (
+                    <>Sua assinatura está ativa.</>
+                  )}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Aproveite o acesso completo ao catálogo.
+                </p>
+              </>
+            )}
           </motion.div>
 
           {/* CTA Button */}
@@ -104,20 +133,23 @@ export function PaymentSuccessModal({ isOpen, onClose, tierName = 'Premium' }: P
               onClick={handleStartWatching}
               className="w-full"
               size="lg"
+              disabled={isLoading}
             >
-              Começar a Assistir
+              {isLoading ? 'Aguarde...' : 'Começar a Assistir'}
             </Button>
           </motion.div>
 
-          {/* Email notice */}
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.7 }}
-            className="text-xs text-muted-foreground mt-4"
-          >
-            Um recibo foi enviado para seu email.
-          </motion.p>
+          {/* Email notice - only show when not loading */}
+          {!isLoading && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.7 }}
+              className="text-xs text-muted-foreground mt-4"
+            >
+              Um recibo foi enviado para seu email.
+            </motion.p>
+          )}
         </div>
       </DialogContent>
     </Dialog>
