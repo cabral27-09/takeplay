@@ -1,9 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle, Sparkles, Loader2 } from 'lucide-react';
+import { CheckCircle, Sparkles, Loader2, ExternalLink, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -20,13 +23,15 @@ interface PaymentSuccessModalProps {
 
 export function PaymentSuccessModal({ isOpen, onClose, tierName, isLoading = false }: PaymentSuccessModalProps) {
   const navigate = useNavigate();
+  const { session } = useAuth();
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
 
   useEffect(() => {
-    // Only auto-close after loading is complete
+    // Only auto-close after loading is complete - extended to 15s for user to see options
     if (isOpen && !isLoading) {
       const timer = setTimeout(() => {
         onClose();
-      }, 8000);
+      }, 15000);
       return () => clearTimeout(timer);
     }
   }, [isOpen, onClose, isLoading]);
@@ -34,6 +39,30 @@ export function PaymentSuccessModal({ isOpen, onClose, tierName, isLoading = fal
   const handleStartWatching = () => {
     onClose();
     navigate('/browse');
+  };
+
+  const handleViewInvoice = async () => {
+    if (!session) return;
+    
+    setIsOpeningPortal(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('customer-portal', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        window.open(data.url, '_blank');
+      }
+    } catch (error) {
+      console.error('Portal error:', error);
+      toast.error('Erro ao abrir portal. Tente novamente.');
+    } finally {
+      setIsOpeningPortal(false);
+    }
   };
 
   return (
@@ -122,12 +151,12 @@ export function PaymentSuccessModal({ isOpen, onClose, tierName, isLoading = fal
             )}
           </motion.div>
 
-          {/* CTA Button */}
+          {/* CTA Buttons */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="mt-6 w-full"
+            className="mt-6 w-full space-y-3"
           >
             <Button 
               onClick={handleStartWatching}
@@ -137,18 +166,37 @@ export function PaymentSuccessModal({ isOpen, onClose, tierName, isLoading = fal
             >
               {isLoading ? 'Aguarde...' : 'Começar a Assistir'}
             </Button>
+            
+            {/* View Invoice Button - only show when not loading */}
+            {!isLoading && (
+              <Button 
+                onClick={handleViewInvoice}
+                variant="outline"
+                className="w-full"
+                size="lg"
+                disabled={isOpeningPortal}
+              >
+                {isOpeningPortal ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                )}
+                Ver Fatura / Recibo
+              </Button>
+            )}
           </motion.div>
 
           {/* Email notice - only show when not loading */}
           {!isLoading && (
-            <motion.p
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.7 }}
-              className="text-xs text-muted-foreground mt-4"
+              className="flex items-center justify-center gap-2 text-xs text-muted-foreground mt-4"
             >
-              Um recibo foi enviado para seu email.
-            </motion.p>
+              <Mail className="w-3 h-3" />
+              <span>Um recibo foi enviado para seu email.</span>
+            </motion.div>
           )}
         </div>
       </DialogContent>
