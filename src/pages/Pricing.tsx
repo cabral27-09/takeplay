@@ -9,8 +9,8 @@ import { SUBSCRIPTION_TIERS, SubscriptionTier } from '@/lib/subscription-tiers';
 import { toast } from 'sonner';
 import { PaymentSuccessModal } from '@/components/subscription/PaymentSuccessModal';
 
-const MAX_SYNC_RETRIES = 5;
-const RETRY_DELAY_MS = 2000;
+const MAX_SYNC_RETRIES = 10;
+const getRetryDelay = (attempt: number) => Math.min(1000 * attempt, 5000); // Progressive: 1s, 2s, 3s... max 5s
 
 export default function Pricing() {
   const [isLoading, setIsLoading] = useState(false);
@@ -38,23 +38,25 @@ export default function Pricing() {
       let retries = 0;
       let syncedSubscription = await checkSubscription();
 
-      // Retry if still on 'free' tier (Stripe might not have processed yet)
+      // Retry with progressive delay if still on 'free' tier (Stripe might not have processed yet)
       while (syncedSubscription.tier === 'free' && retries < MAX_SYNC_RETRIES) {
         retries++;
-        console.log(`[Pricing] Sync retry ${retries}/${MAX_SYNC_RETRIES}...`);
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+        const delay = getRetryDelay(retries);
+        console.log(`[Pricing] Sync retry ${retries}/${MAX_SYNC_RETRIES} (waiting ${delay}ms)...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
         syncedSubscription = await checkSubscription();
       }
 
       if (syncedSubscription.tier !== 'free') {
         const tierInfo = SUBSCRIPTION_TIERS[syncedSubscription.tier];
         setConfirmedTierName(tierInfo?.name);
-        console.log('[Pricing] Subscription synced:', syncedSubscription.tier);
+        console.log('[Pricing] Subscription synced successfully:', syncedSubscription.tier);
+        toast.success(`Plano ${tierInfo?.name || syncedSubscription.tier} ativado!`);
       } else {
-        // Fallback if sync failed after retries
+        // Fallback if sync failed after retries - still show modal with contact info
         setConfirmedTierName(undefined);
-        console.warn('[Pricing] Subscription sync failed after retries');
-        toast.info('Sua assinatura está sendo processada. Pode levar alguns segundos.');
+        console.warn('[Pricing] Subscription sync failed after', MAX_SYNC_RETRIES, 'retries');
+        toast.warning('Sincronização em andamento. Se o plano não aparecer em alguns minutos, entre em contato conosco.');
       }
 
       setIsSyncing(false);

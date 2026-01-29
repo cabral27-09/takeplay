@@ -62,8 +62,19 @@ serve(async (req) => {
       mode: "subscription",
       success_url: `${origin}/pricing?success=true`,
       cancel_url: `${origin}/pricing`,
+      // Enable automatic invoice creation for receipts
+      invoice_creation: {
+        enabled: true,
+      },
+      // Ensure subscription generates invoices
+      subscription_data: {
+        metadata: {
+          user_id: user.id,
+          user_email: user.email,
+        },
+      },
     });
-    logStep("Checkout session created", { sessionId: session.id, url: session.url });
+    logStep("Checkout session created with invoice enabled", { sessionId: session.id, url: session.url });
 
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
