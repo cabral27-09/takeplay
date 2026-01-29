@@ -1,85 +1,104 @@
 
-# Plano: Sincronização Automática de Assinaturas e Feedback Visual
+# Plano: Solução Completa para Sincronização de Assinaturas Stripe
 
 ## Diagnóstico do Problema
 
-O sistema atual **já funciona tecnicamente**, mas tem algumas falhas de experiência:
+### Problema Principal
+Quando uma pessoa paga pelo plano Standard no Stripe, o sistema **não está atualizando automaticamente o acesso dela no app**. A cliente pagou, recebeu o recibo do Stripe, mas continua aparecendo como "Grátis" no TakePlay.
 
-1. **O checkout abre em nova aba** (`window.open(data.url, '_blank')`) - Quando o usuário volta, precisa manualmente atualizar ou aguardar o `visibilitychange`
-2. **O modal de sucesso pode mostrar "Premium" mesmo quando comprou "Standard"** - Porque `tierName` usa o valor antes da sincronização
-3. **Race condition na detecção** - O `checkSubscription()` é chamado, mas o modal já está aberto com dados desatualizados
-4. **Sem loading state durante verificação** - O usuário não sabe se está sincronizando
+### Causa Raiz Identificada
+1. **Email diferente no Stripe vs Supabase**: O sistema `check-subscription` busca pelo email do usuário logado no Supabase e procura um customer com esse email no Stripe. Se o email usado no checkout foi diferente, a sincronização falha.
 
-## Solução Proposta
+2. **Checkout não vincula ao customer**: Quando um usuário novo faz checkout, o Stripe cria um customer com o email do Supabase, mas se o email já existia no Stripe (ex: outro account), pode haver mismatch.
 
-### Fase 1: Melhorar Fluxo de Checkout
+3. **Modal mostra tier incorreto**: O modal de sucesso exibe antes da sincronização confirmar, causando confusão.
 
-**Opção A: Redirecionar na mesma aba (recomendado)**
-- Mudar de `window.open(url, '_blank')` para `window.location.href = url`
-- O Stripe redireciona de volta para `/pricing?success=true`
-- Mais confiável para sincronização automática
+---
 
-**Opção B: Manter nova aba com polling**
-- Quando o usuário volta à aba, fazer múltiplas tentativas de sincronização
-- Adicionar um intervalo de polling até detectar assinatura ativa
+## Solução em 3 Frentes
 
-### Fase 2: Sincronização com Loading State
+### Frente 1: Corrigir Sincronização Imediata (Já implementado, mas precisa melhorar)
 
-1. **Adicionar `isSubscriptionLoading` no estado**
-   - Mostrar skeleton/spinner enquanto verifica
-   - Prevenir decisões de acesso com dados desatualizados
+O código atual já tem retry logic, mas precisa ser mais agressivo e informar melhor o usuário.
 
-2. **Retry logic no `checkSubscription`**
-   - Se voltar de `success=true` e ainda for `free`, aguardar 2s e tentar novamente
-   - Máximo de 3 tentativas
+**Melhorias:**
+- Aumentar retries de 5 para 10
+- Reduzir intervalo inicial para 1s (progressivo)
+- Adicionar logs visíveis para debug
+- Melhorar mensagem quando sync falha
 
-### Fase 3: Modal de Sucesso Inteligente
+### Frente 2: Configurar Recibos Automáticos no Stripe
 
-1. **Aguardar sincronização antes de exibir**
-   - Mostrar loading no modal enquanto verifica
-   - Só exibir o tier correto após confirmação
+O Stripe **já envia recibos automaticamente** quando configurado corretamente. Precisamos garantir que:
+1. O checkout session tenha `payment_method_options.card.setup_future_usage` 
+2. O customer tenha email configurado
+3. A configuração de "Customer emails" esteja ativada no Stripe Dashboard
 
-2. **Fallback se sync falhar**
-   - Mostrar mensagem genérica "Assinatura ativada"
-   - Orientar usuário a recarregar a página se necessário
+**Configuração necessária no Stripe Dashboard:**
+- Settings → Customer emails → Enable "Successful payments"
+- Settings → Customer emails → Enable "Subscriptions"
+
+### Frente 3: Adicionar Botão "Baixar Recibo" no App
+
+Após o pagamento, mostrar um botão para o usuário acessar o portal do Stripe onde pode baixar faturas/recibos.
 
 ---
 
 ## Detalhes Técnicos
 
-### Arquivo: `src/pages/Pricing.tsx`
+### Arquivo 1: `src/pages/Pricing.tsx`
 
-Mudanças:
-- Trocar `window.open(data.url, '_blank')` para `window.location.href = data.url`
-- Adicionar retry logic no useEffect de success
-- Aguardar `checkSubscription()` completar antes de mostrar modal
+**Alterações:**
+- Aumentar MAX_SYNC_RETRIES de 5 para 10
+- Adicionar lógica de intervalo progressivo (1s, 2s, 3s...)
+- Melhorar mensagem de fallback
+- Adicionar botão "Ver minha fatura" no modal de sucesso
+
+### Arquivo 2: `src/components/subscription/PaymentSuccessModal.tsx`
+
+**Alterações:**
+- Adicionar botão para abrir Customer Portal (faturas)
+- Melhorar mensagens de loading/confirmação
+- Mostrar informação sobre recibo por email
+
+### Arquivo 3: `supabase/functions/check-subscription/index.ts`
+
+**Alterações (opcional, para debug):**
+- Adicionar mais logs detalhados
+- Retornar email do customer Stripe para verificação de mismatch
+
+### Arquivo 4: `supabase/functions/create-checkout/index.ts`
+
+**Alterações:**
+- Adicionar `invoice_creation.enabled` para gerar faturas
+- Garantir que o email está sendo passado corretamente
+
+---
+
+## Fluxo Corrigido
 
 ```text
-// Fluxo atual:
-Usuario clica -> Abre nova aba -> Paga -> Volta manualmente -> Precisa dar refresh
-
-// Fluxo proposto:
-Usuario clica -> Redireciona -> Paga -> Volta automaticamente -> Sync automático -> Modal
+1. Usuario clica "Assinar Standard"
+2. App redireciona para Stripe Checkout (mesma aba)
+3. Usuario paga → Stripe envia recibo automaticamente por email
+4. Stripe redireciona para /pricing?success=true
+5. App mostra modal com loading "Confirmando pagamento..."
+6. App tenta sincronizar (até 10x com intervalo progressivo)
+7. Se sucesso: Modal mostra "Standard ativado!" + botão "Ver Fatura"
+8. Se falha após 10 tentativas: Modal mostra instrução para contato + link para portal
+9. Header atualiza badge para "Standard"
 ```
 
-### Arquivo: `src/contexts/AuthContext.tsx`
+---
 
-Mudanças:
-- Adicionar `isSubscriptionLoading` state
-- Retornar o resultado de `checkSubscription` para permitir `await`
-- Opcional: adicionar retry interno
+## Ação Imediata para a Cliente Atual
 
-### Arquivo: `src/components/subscription/PaymentSuccessModal.tsx`
+Para a mulher que já pagou e não foi ativada:
+1. Você pode ativá-la manualmente no painel Admin → Usuários
+2. Encontre ela pelo nome/data de cadastro
+3. Clique em "Definir Plano" → Standard
 
-Mudanças:
-- Aceitar prop `isLoading` para mostrar estado de verificação
-- Mostrar skeleton animado enquanto confirma tier
-- Exibir tier correto apenas após sincronização
-
-### Arquivo: `src/components/subscription/SubscriptionGate.tsx` (se existir)
-
-Verificar:
-- Usa `isSubscriptionLoading` para prevenir bloqueios falsos
+**Porém, preciso do email dela** para confirmar se há mismatch entre Supabase e Stripe.
 
 ---
 
@@ -87,29 +106,31 @@ Verificar:
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/pages/Pricing.tsx` | Mudar para redirect na mesma aba + retry logic |
-| `src/contexts/AuthContext.tsx` | Adicionar `isSubscriptionLoading` e melhorar `checkSubscription` |
-| `src/components/subscription/PaymentSuccessModal.tsx` | Adicionar loading state |
+| `src/pages/Pricing.tsx` | Retry mais agressivo + melhor feedback |
+| `src/components/subscription/PaymentSuccessModal.tsx` | Botão "Ver Fatura" + mensagem sobre email |
+| `supabase/functions/create-checkout/index.ts` | Adicionar invoice_creation para garantir recibo |
 
 ---
 
 ## Resultado Esperado
 
-1. Usuario clica em "Assinar" -> é redirecionado para Stripe
-2. Paga com sucesso -> Stripe redireciona de volta para `/pricing?success=true`
-3. App detecta `success=true` e inicia verificação com loading
-4. Sincroniza com Stripe e obtém tier correto
-5. Modal abre mostrando "Pagamento Confirmado - Standard" (tier correto)
-6. Header atualiza badge para "Standard"
-7. Usuario pode assistir conteúdo imediatamente
+1. **Recibo por email**: O Stripe já envia, mas vamos garantir configuração correta
+2. **Sincronização robusta**: Até 10 tentativas com intervalo progressivo
+3. **Feedback claro**: Modal mostra estado real da sincronização
+4. **Acesso a faturas**: Botão para ver/baixar recibos no portal
+5. **Fallback manual**: Se tudo falhar, instruções claras para contato
 
 ---
 
-## Alternativa: Stripe Webhooks
+## Configuração Necessária no Stripe (sua ação)
 
-Se quiser uma solução mais robusta para o futuro, podemos implementar webhooks do Stripe que:
-- Escutam eventos `checkout.session.completed` e `customer.subscription.created`
-- Salvam a assinatura no banco de dados Supabase
-- Tornam a verificação instantânea sem depender de chamadas à API do Stripe
+Para garantir que os recibos sejam enviados automaticamente:
 
-Isso seria uma melhoria de fase 2, mas o plano acima resolve o problema imediato.
+1. Acesse: https://dashboard.stripe.com/settings/emails
+2. Em "Customer emails", ative:
+   - ✅ Successful payments
+   - ✅ Subscription renewals
+   - ✅ Failed payments
+3. Em "Invoices", ative:
+   - ✅ Email invoices automatically
+
