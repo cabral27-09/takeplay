@@ -75,7 +75,7 @@ export const PRODUCER_TIERS: Record<ProducerTier, ProducerTierInfo> = {
     description: 'Para produtores frequentes',
     features: [
       '10 uploads por ano',
-      'Até 5GB por arquivo',
+      'Até 6GB por arquivo',
       'Suporte prioritário',
       'Destaque no catálogo',
     ],
@@ -93,7 +93,7 @@ export const PRODUCER_TIERS: Record<ProducerTier, ProducerTierInfo> = {
     description: 'Ideal para projetos pontuais',
     features: [
       '5 uploads por semestre',
-      'Até 5GB por arquivo',
+      'Até 6GB por arquivo',
       'Suporte padrão',
     ],
     uploadsAllowed: 5,
@@ -109,7 +109,7 @@ export const PRODUCER_TIERS: Record<ProducerTier, ProducerTierInfo> = {
     description: 'Para um único upload',
     features: [
       '1 upload',
-      'Até 5GB por arquivo',
+      'Até 6GB por arquivo',
       'Válido por 30 dias',
     ],
     uploadsAllowed: 1,

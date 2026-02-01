@@ -97,17 +97,32 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
         cacheControl: '3600',
       },
       chunkSize: 6 * 1024 * 1024, // 6MB chunks
-      onError: (err) => {
-        console.error('Upload error:', err);
+      onError: (err: any) => {
+        console.error('Upload error details:', {
+          message: err.message,
+          causingError: err.originalRequest,
+          originalResponse: err.originalResponse,
+          stack: err.stack,
+        });
         setIsUploading(false);
         setProgress(0);
         uploadRef.current = null;
         
         let errorMessage = 'Não foi possível enviar o vídeo.';
-        if (err.message?.includes('exceeded')) {
-          errorMessage = 'O arquivo excede o limite do servidor.';
-        } else if (err.message?.includes('network')) {
-          errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente.';
+        const statusCode = err.originalResponse?.getStatus?.() || err.originalResponse?.status;
+        
+        if (statusCode === 413) {
+          errorMessage = 'O arquivo excede o limite máximo de 6GB.';
+        } else if (statusCode === 403) {
+          errorMessage = 'Você não tem permissão para fazer upload. Verifique se tem um plano de produtor ativo.';
+        } else if (statusCode === 401) {
+          errorMessage = 'Sessão expirada. Faça login novamente.';
+        } else if (err.message?.includes('exceeded') || err.message?.includes('too large')) {
+          errorMessage = 'O arquivo excede o limite do servidor (6GB máximo).';
+        } else if (err.message?.includes('network') || err.message?.includes('fetch') || err.message?.includes('Failed to fetch')) {
+          errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente. Uploads grandes podem ser retomados.';
+        } else if (err.message?.includes('Unauthorized') || err.message?.includes('not authorized')) {
+          errorMessage = 'Sem permissão. Verifique se você tem um plano de produtor ativo com uploads disponíveis.';
         } else if (err.message) {
           errorMessage = err.message;
         }
