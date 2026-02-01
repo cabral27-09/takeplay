@@ -75,7 +75,7 @@ export function UploadGate({ children }: UploadGateProps) {
               <div className="bg-muted/50 rounded-lg p-4">
                 <h4 className="font-medium mb-2">Benefícios dos planos:</h4>
                 <ul className="text-sm text-muted-foreground space-y-1 text-left">
-                  <li>✓ Upload de até 5GB por arquivo</li>
+                  <li>✓ Upload de até 6GB por arquivo</li>
                   <li>✓ Distribuição para todo o catálogo</li>
                   <li>✓ Suporte técnico dedicado</li>
                   <li>✓ Relatórios de visualização</li>
