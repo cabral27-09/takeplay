@@ -81,12 +81,17 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     const filePath = `movies/${fileName}`;
 
+    // Use direct storage endpoint to bypass proxy limits for large files
+    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+    const directEndpoint = `https://${projectId}.storage.supabase.co/upload/resumable`;
+
     const upload = new tus.Upload(file, {
-      endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
+      endpoint: directEndpoint,
       retryDelays: [0, 1000, 3000, 5000, 10000],
       headers: {
         authorization: `Bearer ${session.access_token}`,
         apikey: SUPABASE_ANON_KEY,
+        'x-upsert': 'true', // Allow overwriting existing files
       },
       uploadDataDuringCreation: true,
       removeFingerprintOnSuccess: true,
@@ -98,21 +103,32 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
       },
       chunkSize: 6 * 1024 * 1024, // 6MB chunks
       onError: (err: any) => {
-        console.error('Upload error details:', {
+        // Capture detailed error info for debugging
+        const statusCode = err.originalResponse?.getStatus?.() || err.originalResponse?.status;
+        const responseBody = err.originalResponse?.getBody?.() || err.message || '';
+        
+        console.error('TUS Upload Error:', {
+          status: statusCode,
           message: err.message,
-          causingError: err.originalRequest,
-          originalResponse: err.originalResponse,
-          stack: err.stack,
+          responseBody: responseBody,
+          fileSize: file.size,
+          fileSizeGB: (file.size / (1024 * 1024 * 1024)).toFixed(2),
+          endpoint: directEndpoint,
         });
+        
         setIsUploading(false);
         setProgress(0);
         uploadRef.current = null;
         
         let errorMessage = 'Não foi possível enviar o vídeo.';
-        const statusCode = err.originalResponse?.getStatus?.() || err.originalResponse?.status;
         
         if (statusCode === 413) {
-          errorMessage = 'O arquivo excede o limite máximo de 6GB.';
+          // Check if file is actually within limits
+          if (file.size < maxSize) {
+            errorMessage = `O servidor rejeitou o upload (413). Arquivo: ${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB. Isso pode ser um problema temporário - tente novamente em alguns minutos.`;
+          } else {
+            errorMessage = 'O arquivo excede o limite máximo de 6GB.';
+          }
         } else if (statusCode === 403) {
           errorMessage = 'Você não tem permissão para fazer upload. Verifique se tem um plano de produtor ativo.';
         } else if (statusCode === 401) {
@@ -123,6 +139,9 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
           errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente. Uploads grandes podem ser retomados.';
         } else if (err.message?.includes('Unauthorized') || err.message?.includes('not authorized')) {
           errorMessage = 'Sem permissão. Verifique se você tem um plano de produtor ativo com uploads disponíveis.';
+        } else if (responseBody) {
+          // Show actual server response if available
+          errorMessage = `Erro: ${responseBody}`;
         } else if (err.message) {
           errorMessage = err.message;
         }
