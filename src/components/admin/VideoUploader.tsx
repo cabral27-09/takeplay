@@ -83,7 +83,7 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
 
     // Use direct storage endpoint to bypass proxy limits for large files
     const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-    const directEndpoint = `https://${projectId}.storage.supabase.co/upload/resumable`;
+    const directEndpoint = `https://${projectId}.storage.supabase.co/storage/v1/upload/resumable`;
 
     const upload = new tus.Upload(file, {
       endpoint: directEndpoint,
