@@ -1,159 +1,117 @@
 
-# Plano: Criar Edge Function Proxy para Upload de Vídeos Grandes
 
-## Problema Confirmado
+# Plano: Adicionar Gerenciamento Manual de Uploads para Produtores
 
-O erro 413 está ocorrendo mesmo com arquivo de 3.49GB (abaixo do limite de 6GB) porque:
+## Problema Identificado
 
-1. O protocolo TUS envia o header `Upload-Length` com o tamanho total antes de iniciar
-2. Um proxy/load balancer na infraestrutura está rejeitando baseado nesse header
-3. Isso acontece antes mesmo dos chunks serem enviados
+Atualmente, a área de gerenciamento de usuários permite:
+- ✅ Conceder roles (viewer, producer, admin)
+- ✅ Conceder assinaturas de visualização (Grátis, Standard, Premium)
+- ❌ **NÃO permite conceder uploads de produtor manualmente**
 
-## Solução: Upload em Chunks via Storage API
+O sistema `UploadGate` verifica a tabela `producer_purchases`, que só é populada via pagamentos no Stripe. Você precisa de uma forma de conceder uploads manualmente para produtores específicos.
 
-A solução mais robusta é **usar a API de upload padrão do Supabase em chunks menores**, em vez do protocolo TUS que está sendo bloqueado.
+## Solução
 
-### Abordagem: Upload Multipart Direto
-
-Vamos modificar o uploader para:
-
-1. **Dividir o arquivo em chunks de 50MB** no browser
-2. **Fazer upload de cada chunk** usando a API padrão do Supabase Storage
-3. **Concatenar os chunks** no servidor após todos serem enviados
-4. **Manter a funcionalidade de pausa/retomada** usando localStorage para tracking
+Adicionar na página de Gerenciamento de Usuários (Admin → Users) uma nova seção para **conceder uploads de produtor** manualmente, similar ao que já existe para assinaturas de visualização.
 
 ---
 
-## Arquivos a Criar/Modificar
+## Arquivos a Modificar
 
-### 1. Nova Edge Function: `upload-video-chunk`
-
-Esta função recebe chunks de vídeo e faz upload direto para o storage.
-
-```text
-supabase/functions/upload-video-chunk/index.ts
-```
-
-**Responsabilidades:**
-- Receber chunk de vídeo (máximo 50MB)
-- Fazer upload para uma pasta temporária no bucket
-- Retornar confirmação de sucesso
-
-### 2. Nova Edge Function: `finalize-video-upload`
-
-Esta função concatena todos os chunks em um arquivo final.
-
-```text
-supabase/functions/finalize-video-upload/index.ts
-```
-
-**Responsabilidades:**
-- Receber lista de chunks
-- Baixar e concatenar todos os chunks
-- Salvar arquivo final no caminho correto
-- Limpar chunks temporários
-
-### 3. Modificar VideoUploader.tsx
-
-Trocar a implementação TUS por upload em chunks manual.
-
-```text
-src/components/admin/VideoUploader.tsx
-```
-
-**Mudanças:**
-- Implementar divisão do arquivo em chunks de 50MB
-- Fazer upload sequencial de cada chunk via fetch
-- Mostrar progresso baseado em chunks completados
-- Suportar pausa/retomada salvando estado no localStorage
-- Chamar edge function de finalização após todos os chunks
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/pages/admin/Users.tsx` | Adicionar UI para gerenciar uploads de produtores |
+| `src/hooks/useAdminSubscriptions.ts` | Adicionar funções para gerenciar `producer_purchases` manualmente |
+| `supabase/functions/check-producer-purchase/index.ts` | Verificar também compras concedidas por admin |
 
 ---
 
-## Fluxo do Upload
+## Detalhes da Implementação
+
+### 1. Nova Coluna na Tabela de Usuários
+
+Adicionar uma coluna "Uploads de Produtor" na tabela de usuários que mostra:
+- Quantidade de uploads restantes
+- Se foi concedido manualmente pelo admin ou via Stripe
+
+### 2. Menu de Ações Expandido
+
+No dropdown de ações de cada usuário (com role `producer`), adicionar:
+- **Conceder Uploads** → Abre dialog para definir quantidade (1, 5, 10, ou personalizado)
+- **Visualizar Compras** → Mostra histórico de compras/concessões
+- **Revogar Uploads** → Remove uploads concedidos manualmente
+
+### 3. Dialog de Concessão de Uploads
+
+Um modal para definir:
+- Quantidade de uploads (1, 5, 10, ou input customizado)
+- Data de expiração (opcional)
+- Motivo da concessão
+
+### 4. Modificação na Tabela `producer_purchases`
+
+Os registros criados manualmente terão:
+- `stripe_payment_intent_id`: valor especial como `admin_grant_{timestamp}` para indicar que foi manual
+- `tier`: valor como `admin_grant` para diferenciar de compras normais
+
+---
+
+## Fluxo Visual
 
 ```text
-┌─────────────────┐     ┌─────────────────────────────────────────────────────────┐
-│   BROWSER       │     │  LOVABLE CLOUD BACKEND                                  │
-│                 │     │                                                         │
-│  Arquivo 3.5GB  │     │  ┌─────────────────────┐    ┌─────────────────────────┐│
-│       │         │     │  │ upload-video-chunk  │    │ Storage Bucket: videos  ││
-│       ▼         │     │  │                     │    │                         ││
-│  Divide em      │     │  │ - Recebe chunk      │    │ temp/{upload_id}/       ││
-│  70 chunks      │────▶│  │ - Upload para temp  │───▶│   chunk_0.bin          ││
-│  de 50MB        │     │  │ - Retorna OK        │    │   chunk_1.bin          ││
-│       │         │     │  └─────────────────────┘    │   chunk_2.bin          ││
-│       │         │     │                             │   ...                   ││
-│       ▼         │     │  ┌─────────────────────┐    │   chunk_69.bin         ││
-│  Após último    │     │  │finalize-video-upload│    │                         ││
-│  chunk          │────▶│  │                     │───▶│ movies/                 ││
-│                 │     │  │ - Concatena chunks  │    │   video_final.mp4      ││
-│                 │     │  │ - Deleta temp       │    │                         ││
-└─────────────────┘     │  └─────────────────────┘    └─────────────────────────┘│
-                        └─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  Gerenciar Usuários (Admin)                                     │
+├─────────────────────────────────────────────────────────────────┤
+│  Usuário     │ Roles      │ Assinatura  │ Uploads    │ Ações   │
+├──────────────┼────────────┼─────────────┼────────────┼─────────┤
+│  João Silva  │ Produtor   │ Stripe      │ 5 restam   │   ⋮     │
+│              │            │             │ (Admin)    │         │
+├──────────────┼────────────┼─────────────┼────────────┼─────────┤
+│  Maria       │ Espectador │ Premium     │ -          │   ⋮     │
+│              │            │ (Admin)     │            │         │
+└─────────────────────────────────────────────────────────────────┘
+
+                              │
+                              ▼ (Clica em ⋮ do produtor)
+
+         ┌────────────────────────────────────┐
+         │  Adicionar Role                    │
+         │  ─────────────────────────────     │
+         │  Remover Role                      │
+         │  ─────────────────────────────     │
+         │  Assinatura                        │
+         │  ─────────────────────────────     │
+         │  🆕 Uploads de Produtor        ▶   │──▶ Conceder Uploads
+         │                                    │    Visualizar Histórico
+         │                                    │    Revogar Uploads
+         └────────────────────────────────────┘
 ```
 
 ---
 
-## Detalhes Técnicos
+## Hook Atualizado
 
-### Edge Function: upload-video-chunk
+O `useAdminSubscriptions.ts` será expandido para incluir:
 
 ```typescript
-// Recebe: FormData com chunk de vídeo (max 50MB)
-// - upload_id: ID único do upload
-// - chunk_index: Número do chunk (0, 1, 2...)
-// - chunk: Blob do chunk
-
-// Faz upload para: videos/temp/{upload_id}/chunk_{index}.bin
-// Retorna: { success: true, chunk_index }
+// Novas funções para producer_purchases
+grantProducerUploads: ({ userId, uploadsAllowed, expiresAt, reason }) => void
+revokeProducerUploads: (purchaseId) => void
 ```
-
-### Edge Function: finalize-video-upload
-
-```typescript
-// Recebe: JSON
-// - upload_id: ID único do upload
-// - total_chunks: Número total de chunks
-// - final_path: Caminho final do arquivo (ex: movies/video.mp4)
-// - content_type: MIME type do vídeo
-
-// Processo:
-// 1. Baixa todos os chunks em sequência
-// 2. Concatena em um único buffer/stream
-// 3. Faz upload do arquivo final
-// 4. Deleta pasta temp/{upload_id}
-// Retorna: { success: true, path: final_path }
-```
-
-### VideoUploader - Novo Fluxo
-
-1. **Início**: Gera `upload_id` único
-2. **Para cada chunk de 50MB**:
-   - Extrai slice do arquivo
-   - Envia para edge function
-   - Atualiza progresso
-   - Salva estado no localStorage
-3. **Finalização**: Chama edge function para concatenar
-4. **Pausa**: Salva `upload_id` e `current_chunk` no localStorage
-5. **Retomada**: Carrega estado e continua do último chunk
 
 ---
 
-## Vantagens desta Abordagem
+## Edge Function Atualizada
 
-| Aspecto | TUS (atual) | Chunks via Edge Function |
-|---------|-------------|--------------------------|
-| Limite de tamanho | Bloqueado por proxy | Sem limite (50MB por request) |
-| Compatibilidade | Problemas com infraestrutura | Funciona com qualquer setup |
-| Controle | Depende de biblioteca | Total controle do código |
-| Debug | Difícil | Fácil (logs nas edge functions) |
+A função `check-producer-purchase` já verifica a tabela `producer_purchases`, então registros criados manualmente pelo admin serão automaticamente reconhecidos.
 
 ---
 
 ## Resultado Esperado
 
-1. Upload de vídeos de 3.49GB+ funciona sem erro 413
-2. Barra de progresso mostra avanço por chunk
-3. Pausa/retomada funciona salvando estado local
-4. Logs detalhados nas edge functions para debug
+1. Admin pode conceder uploads para qualquer produtor sem precisar de pagamento no Stripe
+2. Uploads concedidos aparecem marcados como "(Admin)" na interface
+3. Sistema de upload (`UploadGate`) reconhece automaticamente os uploads concedidos
+4. Histórico completo de concessões fica registrado para auditoria
+
