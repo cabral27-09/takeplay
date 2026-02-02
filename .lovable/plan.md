@@ -1,125 +1,106 @@
 
 
-# Plano: Corrigir Upload de Vídeos Grandes (3.9GB+)
+# Plano: Corrigir Erro de Upload de Vídeos Grandes (3.49GB mostrando "excede 6GB")
 
-## Diagnóstico do Problema
+## Diagnóstico Confirmado
 
-### O que foi reportado
-Tentativa de upload de vídeo de **3.9GB** para a série "O Papo Faz Curva EP2" foi bloqueado, mesmo que o limite deveria ser 5GB.
+### O Que Está Acontecendo
+- O arquivo tem **3.49GB** (menor que o limite de 6GB)
+- A mensagem de erro diz "O arquivo excede o limite máximo de 6GB"
+- O erro aparece **instantaneamente** ao tentar enviar
+- O bucket está configurado corretamente para 6GB
 
-### Possíveis Causas Identificadas
+### Causa Raiz
+O protocolo TUS envia o tamanho total do arquivo no header `Upload-Length` antes de iniciar o upload. Algum componente da infraestrutura está rejeitando esse header com status **413** antes mesmo de receber os chunks.
 
-| Causa | Probabilidade | Detalhe |
-|-------|---------------|---------|
-| **1. Usuário sem plano ativo** | Alta | O `UploadGate` bloqueia antes mesmo do upload se não houver compra válida |
-| **2. Limite de memória do navegador** | Média | Arquivos de 3.9GB podem exceder o heap do JavaScript |
-| **3. Timeout de conexão** | Média | Uploads longos podem sofrer interrupção |
-| **4. Inconsistência de limites** | Baixa | Client diz 6GB, bucket permite 5GB (mas 3.9GB está abaixo) |
-| **5. Erro de rede/TUS** | Média | O protocolo resumable pode ter falhado silenciosamente |
-
-### Status Atual da Configuração
-
-**Bucket `videos`:**
-- `file_size_limit`: 5GB (5.368.709.120 bytes) ✓
-- `public`: false (privado, correto) ✓
-- MIME types: `video/mp4`, `video/webm`, `video/quicktime` ✓
-
-**Políticas de Storage:**
-- ✅ `Producers can upload videos` - permite INSERT para produtores
-- ✅ `Producers can update videos` - permite UPDATE
-- ✅ `Producers can delete videos` - permite DELETE
-
-**VideoUploader.tsx:**
-- Usa TUS (resumable upload) ✓
-- Chunk size: 6MB ✓
-- Retry delays configurados ✓
-- Validação client: 6GB (inconsistente com 5GB do bucket)
+Isso pode acontecer porque:
+1. Um proxy intermediário não entende o protocolo TUS
+2. O Kong API Gateway tem um limite de body size configurado
+3. Cache de configuração antiga ainda ativo
 
 ---
 
-## Solução Proposta
+## Solução em 3 Partes
 
-### Fase 1: Harmonizar Limites e Aumentar para 6GB
+### Parte 1: Melhorar Diagnóstico de Erros
 
-O memory `constraints/storage-limits` menciona que o limite deveria ser **6GB** para acomodar uploads grandes. Precisamos:
+Modificar o `VideoUploader.tsx` para mostrar a **mensagem real do servidor** em vez de assumir que 413 = "arquivo muito grande".
 
-1. **Atualizar o bucket** para 6GB (6.442.450.944 bytes)
-2. **Corrigir textos da UI** que mostram "5GB"
+Isso vai nos ajudar a identificar exatamente qual erro está sendo retornado.
 
-### Fase 2: Melhorar Tratamento de Erros no Upload
+### Parte 2: Usar Endpoint de Storage Direto
 
-Atualmente, erros podem não ser mostrados corretamente. Precisamos:
+De acordo com a documentação do Supabase, para uploads resumáveis grandes, é recomendado usar o endpoint de storage **direto**:
 
-1. Adicionar logs detalhados do erro real
-2. Mostrar mensagem específica quando TUS falha
-3. Detectar quando o usuário não tem permissão vs arquivo grande demais
+- **Atual**: `https://frakvusemijynkcfsywj.supabase.co/storage/v1/upload/resumable`
+- **Direto**: `https://frakvusemijynkcfsywj.storage.supabase.co/upload/resumable`
 
-### Fase 3: Verificar Plano do Produtor
+O endpoint direto bypassa alguns proxies que podem estar causando o problema.
 
-O erro mais provável é que o produtor **não tem plano ativo** ou **uploads esgotados**. O `UploadGate` bloqueia isso, mas a mensagem pode não estar clara.
+### Parte 3: Adicionar Fallback e Retry Inteligente
+
+Se o primeiro endpoint falhar, tentar automaticamente o segundo antes de mostrar erro.
 
 ---
 
 ## Detalhes Técnicos
 
-### Migração SQL (aumentar limite do bucket)
-
-Atualizar o bucket `videos` para permitir arquivos de até 6GB:
-
-```sql
-UPDATE storage.buckets 
-SET file_size_limit = 6442450944 
-WHERE id = 'videos';
-```
-
-### Arquivo: `src/components/producer/UploadGate.tsx`
-
-Corrigir texto de "5GB" para "6GB" na lista de benefícios:
-
-- Linha 78: `'✓ Upload de até 5GB por arquivo'` → `'✓ Upload de até 6GB por arquivo'`
-
-### Arquivo: `src/lib/subscription-tiers.ts`
-
-Atualizar as features dos planos de produtor:
-
-- Linhas 78, 96, 112: `'Até 5GB por arquivo'` → `'Até 6GB por arquivo'`
-
 ### Arquivo: `src/components/admin/VideoUploader.tsx`
 
-Melhorar o tratamento de erro para identificar a causa exata:
+**Alteração 1: Melhorar mensagens de erro (linhas 100-131)**
 
-- Linha 100-116: Expandir a lógica de `onError` para detectar:
-  - Erro 413 (arquivo muito grande)
-  - Erro 403 (sem permissão - produtor sem plano)
-  - Erro de rede/timeout
-  - Quota excedida
-
-Exemplo de melhoria:
+Em vez de assumir que 413 sempre significa "arquivo muito grande", vamos:
+- Capturar a mensagem real do servidor
+- Mostrar uma mensagem mais informativa
+- Adicionar log com detalhes completos para debug
 
 ```typescript
-onError: (err) => {
-  console.error('Upload error details:', {
+onError: (err: any) => {
+  // Capturar detalhes reais do erro
+  const statusCode = err.originalResponse?.getStatus?.() || err.originalResponse?.status;
+  const responseBody = err.originalResponse?.getBody?.() || '';
+  
+  console.error('TUS Upload Error:', {
+    status: statusCode,
     message: err.message,
-    causingError: err.originalRequest,
-    originalResponse: err.originalResponse,
+    responseBody: responseBody,
+    fileSize: selectedFile?.size,
+    fileSizeGB: selectedFile ? (selectedFile.size / (1024 * 1024 * 1024)).toFixed(2) : 'N/A',
   });
   
   let errorMessage = 'Não foi possível enviar o vídeo.';
   
-  if (err.originalResponse?.status === 413) {
-    errorMessage = 'O arquivo excede o limite máximo de 6GB.';
-  } else if (err.originalResponse?.status === 403) {
-    errorMessage = 'Você não tem permissão para fazer upload. Verifique se tem um plano de produtor ativo.';
-  } else if (err.message?.includes('network') || err.message?.includes('fetch')) {
-    errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente. Uploads grandes podem ser retomados.';
-  } else if (err.message?.includes('exceeded') || err.message?.includes('too large')) {
-    errorMessage = 'O arquivo excede o limite do servidor (6GB máximo).';
-  } else if (err.message) {
-    errorMessage = err.message;
+  if (statusCode === 413) {
+    // Verificar se realmente é por tamanho ou outro motivo
+    if (selectedFile && selectedFile.size < maxSize) {
+      errorMessage = `O servidor rejeitou o upload (413). Arquivo: ${(selectedFile.size / (1024*1024*1024)).toFixed(2)}GB. Isso pode ser um problema temporário - tente novamente em alguns minutos.`;
+    } else {
+      errorMessage = 'O arquivo excede o limite máximo de 6GB.';
+    }
   }
-  
-  setError({ title: 'Erro no upload', description: errorMessage });
+  // ... resto do tratamento
 }
+```
+
+**Alteração 2: Usar endpoint de storage direto (linha 85)**
+
+```typescript
+// Antes
+endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
+
+// Depois - usar endpoint de storage direto para evitar proxy
+const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+endpoint: `https://${projectId}.storage.supabase.co/upload/resumable`,
+```
+
+**Alteração 3: Adicionar header x-upsert para sobrescrever se existir**
+
+```typescript
+headers: {
+  authorization: `Bearer ${session.access_token}`,
+  apikey: SUPABASE_ANON_KEY,
+  'x-upsert': 'true', // Permite sobrescrever arquivo existente
+},
 ```
 
 ---
@@ -128,50 +109,22 @@ onError: (err) => {
 
 | Arquivo | Alteração |
 |---------|-----------|
-| Migração SQL | Aumentar `file_size_limit` do bucket para 6GB |
-| `src/components/producer/UploadGate.tsx` | Corrigir texto "5GB" → "6GB" |
-| `src/lib/subscription-tiers.ts` | Corrigir textos dos planos "5GB" → "6GB" |
-| `src/components/admin/VideoUploader.tsx` | Melhorar mensagens de erro |
+| `src/components/admin/VideoUploader.tsx` | Endpoint direto + mensagens de erro melhores |
 
 ---
 
-## Investigação Adicional Necessária
+## Teste Recomendado
 
-Para determinar a causa exata do erro da série "O Papo Faz Curva EP2", preciso saber:
-
-1. **O produtor tem plano ativo?** 
-   - Qual é o email do produtor que tentou fazer o upload?
-   - Ele comprou um plano de produtor (Anual, Semestral ou Avulso)?
-
-2. **Qual foi a mensagem de erro exibida?**
-   - Apareceu algum toast/alert?
-   - O upload começou e depois falhou, ou nem iniciou?
-
-3. **Qual navegador/dispositivo foi usado?**
-   - Navegadores móveis têm limites de memória menores
-
----
-
-## Fluxo Esperado Após Correção
-
-```text
-1. Produtor acessa /producer/upload
-2. Sistema verifica se tem plano ativo (UploadGate)
-3. Se sim, mostra formulário com uploader
-4. Produtor seleciona vídeo de 3.9GB
-5. Validação client passa (< 6GB)
-6. TUS inicia upload resumable em chunks de 6MB
-7. Progress bar mostra avanço + velocidade
-8. Se falhar, sistema permite retomar de onde parou
-9. Ao completar, salva path relativo no banco
-```
+Após as alterações, peça para o produtor tentar novamente o upload do arquivo de 3.49GB. Se der erro novamente:
+1. O console do navegador (F12 → Console) vai mostrar detalhes completos
+2. A mensagem de erro na tela vai ser mais informativa
+3. Você pode me enviar o log do console para investigar mais
 
 ---
 
 ## Resultado Esperado
 
-1. ✅ Uploads de até 6GB funcionam corretamente
-2. ✅ Mensagens de erro claras quando algo falha
-3. ✅ Textos da UI consistentes (todos dizem "6GB")
-4. ✅ Produtor consegue enviar "O Papo Faz Curva EP2"
+1. Upload de vídeos de 3.49GB funciona corretamente
+2. Se falhar, a mensagem de erro é clara e informativa
+3. Logs detalhados permitem diagnóstico futuro
 
