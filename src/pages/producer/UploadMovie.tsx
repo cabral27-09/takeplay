@@ -98,8 +98,15 @@ export default function ProducerUploadMovie() {
 
   // Auto-fill form when selecting an existing series - inherit ALL fields from parent
   useEffect(() => {
+    console.log('Auto-fill effect triggered:', { 
+      selectedSeriesData, 
+      seriesMode, 
+      selectedSeriesId,
+      hasData: !!selectedSeriesData 
+    });
+    
     if (selectedSeriesData && seriesMode === 'existing') {
-      console.log('Auto-filling from series:', selectedSeriesData);
+      console.log('Auto-filling form with series data:', selectedSeriesData);
       setFormData(prev => ({
         ...prev,
         // Tipo de conteúdo (sempre série quando vem da série pai)
@@ -137,7 +144,7 @@ export default function ProducerUploadMovie() {
         producer_name: selectedSeriesData.producer_name || prev.producer_name,
       }));
     }
-  }, [selectedSeriesData, seriesMode]);
+  }, [selectedSeriesData, seriesMode, selectedSeriesId]);
 
   // Reset series fields when switching modes
   useEffect(() => {
@@ -634,159 +641,207 @@ export default function ProducerUploadMovie() {
               </div>
             )}
 
-            {/* Basic Info - Hidden fields when existing series selected */}
-            {!isExistingSeriesSelected && (
-              <div className="space-y-4">
-                <h2 className="text-lg font-semibold border-b border-border pb-2">
-                  Informações Básicas
-                </h2>
-                
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="title">
-                      {formData.content_type === 'serie' ? 'Nome da Série *' : 'Título *'}
-                    </Label>
-                    <Input
-                      id="title"
-                      value={formData.title}
-                      onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                      placeholder={formData.content_type === 'serie' ? 'Nome da série' : formData.content_type === 'espetaculo' ? 'Nome do espetáculo' : 'Nome do filme'}
-                      required
-                    />
-                  </div>
+            {/* Basic Info - Show as read-only when existing series selected */}
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold border-b border-border pb-2">
+                {isExistingSeriesSelected ? 'Dados Herdados da Série (Somente Leitura)' : 'Informações Básicas'}
+              </h2>
+              
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="title">
+                    {formData.content_type === 'serie' ? 'Nome da Série *' : 'Título *'}
+                  </Label>
+                  <Input
+                    id="title"
+                    value={formData.title}
+                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder={formData.content_type === 'serie' ? 'Nome da série' : formData.content_type === 'espetaculo' ? 'Nome do espetáculo' : 'Nome do filme'}
+                    required
+                    disabled={isExistingSeriesSelected}
+                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
+                  />
+                </div>
 
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="synopsis">Sinopse *</Label>
-                    <Textarea
-                      id="synopsis"
-                      value={formData.synopsis}
-                      onChange={(e) => setFormData(prev => ({ ...prev, synopsis: e.target.value }))}
-                      placeholder="Descrição do filme..."
-                      rows={4}
-                    />
-                  </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="synopsis">Sinopse *</Label>
+                  <Textarea
+                    id="synopsis"
+                    value={formData.synopsis}
+                    onChange={(e) => setFormData(prev => ({ ...prev, synopsis: e.target.value }))}
+                    placeholder="Descrição do filme..."
+                    rows={4}
+                    disabled={isExistingSeriesSelected}
+                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
+                  />
+                </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="year">Ano de Produção</Label>
-                    <Input
-                      id="year"
-                      type="number"
-                      min={1900}
-                      max={2100}
-                      value={formData.year}
-                      onChange={(e) => setFormData(prev => ({ ...prev, year: parseInt(e.target.value) || 0 }))}
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="year">Ano de Produção</Label>
+                  <Input
+                    id="year"
+                    type="number"
+                    min={1900}
+                    max={2100}
+                    value={formData.year}
+                    onChange={(e) => setFormData(prev => ({ ...prev, year: parseInt(e.target.value) || 0 }))}
+                    disabled={isExistingSeriesSelected}
+                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
+                  />
+                </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="duration">Duração (minutos)</Label>
-                    <Input
-                      id="duration"
-                      type="number"
-                      min={1}
-                      max={600}
-                      value={formData.duration}
-                      onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="duration">Duração (minutos)</Label>
+                  <Input
+                    id="duration"
+                    type="number"
+                    min={1}
+                    max={600}
+                    value={formData.duration}
+                    onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
+                    disabled={isExistingSeriesSelected}
+                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
+                  />
+                </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="age_rating">Classificação Etária *</Label>
-                    <Select
-                      value={formData.age_rating}
-                      onValueChange={(value: AgeRating) => 
-                        setFormData(prev => ({ ...prev, age_rating: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="L">L - Livre para todos</SelectItem>
-                        <SelectItem value="10">10 - Não recomendado para menores de 10 anos</SelectItem>
-                        <SelectItem value="12">12 - Não recomendado para menores de 12 anos</SelectItem>
-                        <SelectItem value="14">14 - Não recomendado para menores de 14 anos</SelectItem>
-                        <SelectItem value="16">16 - Não recomendado para menores de 16 anos</SelectItem>
-                        <SelectItem value="18">18 - Não recomendado para menores de 18 anos</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="age_rating">Classificação Etária *</Label>
+                  <Select
+                    value={formData.age_rating}
+                    onValueChange={(value: AgeRating) => 
+                      setFormData(prev => ({ ...prev, age_rating: value }))
+                    }
+                    disabled={isExistingSeriesSelected}
+                  >
+                    <SelectTrigger className={isExistingSeriesSelected ? 'bg-muted' : ''}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="L">L - Livre para todos</SelectItem>
+                      <SelectItem value="10">10 - Não recomendado para menores de 10 anos</SelectItem>
+                      <SelectItem value="12">12 - Não recomendado para menores de 12 anos</SelectItem>
+                      <SelectItem value="14">14 - Não recomendado para menores de 14 anos</SelectItem>
+                      <SelectItem value="16">16 - Não recomendado para menores de 16 anos</SelectItem>
+                      <SelectItem value="18">18 - Não recomendado para menores de 18 anos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="language">Idioma do Áudio *</Label>
-                    <Select
-                      value={formData.language}
-                      onValueChange={(value: ContentLanguage) => 
-                        setFormData(prev => ({ ...prev, language: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="portugues">Português</SelectItem>
-                        <SelectItem value="ingles">Inglês</SelectItem>
-                        <SelectItem value="espanhol">Espanhol</SelectItem>
-                        <SelectItem value="outro">Outro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="language">Idioma do Áudio *</Label>
+                  <Select
+                    value={formData.language}
+                    onValueChange={(value: ContentLanguage) => 
+                      setFormData(prev => ({ ...prev, language: value }))
+                    }
+                    disabled={isExistingSeriesSelected}
+                  >
+                    <SelectTrigger className={isExistingSeriesSelected ? 'bg-muted' : ''}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="portugues">Português</SelectItem>
+                      <SelectItem value="ingles">Inglês</SelectItem>
+                      <SelectItem value="espanhol">Espanhol</SelectItem>
+                      <SelectItem value="outro">Outro</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-            )}
+            </div>
 
-            {/* Genres - Hidden when existing series selected */}
-            {!isExistingSeriesSelected && (
-              <div className="space-y-4">
-                <h2 className="text-lg font-semibold border-b border-border pb-2">
-                  Gêneros
-                </h2>
-                
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {genres?.map((genre) => (
-                    <label
-                      key={genre.id}
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
-                      <Checkbox
-                        checked={formData.genre_ids.includes(genre.id)}
-                        onCheckedChange={() => handleGenreToggle(genre.id)}
-                      />
-                      <span className="text-sm">{genre.name}</span>
-                    </label>
-                  ))}
-                </div>
+            {/* Genres - Show as read-only when existing series selected */}
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold border-b border-border pb-2">
+                Gêneros {isExistingSeriesSelected && '(Herdados)'}
+              </h2>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {genres?.map((genre) => (
+                  <label
+                    key={genre.id}
+                    className={`flex items-center gap-2 ${isExistingSeriesSelected ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+                  >
+                    <Checkbox
+                      checked={formData.genre_ids.includes(genre.id)}
+                      onCheckedChange={() => !isExistingSeriesSelected && handleGenreToggle(genre.id)}
+                      disabled={isExistingSeriesSelected}
+                    />
+                    <span className="text-sm">{genre.name}</span>
+                  </label>
+                ))}
               </div>
-            )}
+              {isExistingSeriesSelected && formData.genre_ids.length === 0 && (
+                <p className="text-sm text-muted-foreground italic">
+                  Nenhum gênero definido na série pai
+                </p>
+              )}
+            </div>
 
             {/* Media */}
             <div className="space-y-4">
               <h2 className="text-lg font-semibold border-b border-border pb-2">
-                {isExistingSeriesSelected ? 'Vídeo do Episódio' : 'Mídia'}
+                {isExistingSeriesSelected ? 'Mídia (Imagens Herdadas + Vídeo do Episódio)' : 'Mídia'}
               </h2>
               
-              {/* Thumbnail and Backdrop - Hidden when existing series selected */}
-              {!isExistingSeriesSelected && (
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Capa do Filme (2:3) *</Label>
+              {/* Thumbnail and Backdrop - Show as preview when existing series selected */}
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Capa {formData.content_type === 'serie' ? 'da Série' : 'do Filme'} (2:3) {!isExistingSeriesSelected && '*'}</Label>
+                  {isExistingSeriesSelected ? (
+                    formData.thumbnail_url ? (
+                      <div className="relative">
+                        <img 
+                          src={formData.thumbnail_url} 
+                          alt="Thumbnail da série" 
+                          className="h-48 w-auto rounded-lg border border-border object-cover"
+                        />
+                        <Badge variant="secondary" className="absolute top-2 right-2 text-xs">
+                          Herdado
+                        </Badge>
+                      </div>
+                    ) : (
+                      <div className="h-48 rounded-lg border border-dashed border-border flex items-center justify-center text-muted-foreground text-sm">
+                        Sem imagem definida
+                      </div>
+                    )
+                  ) : (
                     <ImageUploader
                       value={formData.thumbnail_url}
                       onChange={(url) => setFormData(prev => ({ ...prev, thumbnail_url: url }))}
                       aspectRatio="thumbnail"
                     />
-                  </div>
+                  )}
+                </div>
 
-                  <div className="space-y-2">
-                    <Label>Banner (16:9)</Label>
+                <div className="space-y-2">
+                  <Label>Banner (16:9)</Label>
+                  {isExistingSeriesSelected ? (
+                    formData.backdrop_url ? (
+                      <div className="relative">
+                        <img 
+                          src={formData.backdrop_url} 
+                          alt="Banner da série" 
+                          className="h-48 w-full rounded-lg border border-border object-cover"
+                        />
+                        <Badge variant="secondary" className="absolute top-2 right-2 text-xs">
+                          Herdado
+                        </Badge>
+                      </div>
+                    ) : (
+                      <div className="h-48 rounded-lg border border-dashed border-border flex items-center justify-center text-muted-foreground text-sm">
+                        Sem banner definido
+                      </div>
+                    )
+                  ) : (
                     <ImageUploader
                       value={formData.backdrop_url}
                       onChange={(url) => setFormData(prev => ({ ...prev, backdrop_url: url }))}
                       aspectRatio="backdrop"
                     />
-                  </div>
+                  )}
                 </div>
-              )}
+              </div>
 
               <div className="space-y-2">
                 <Label>
@@ -802,21 +857,23 @@ export default function ProducerUploadMovie() {
                 />
               </div>
 
-              {/* Trailer - Hidden when existing series selected */}
-              {!isExistingSeriesSelected && (
-                <div className="space-y-2">
-                  <Label htmlFor="trailer_url">URL do Trailer (YouTube Embed)</Label>
-                  <Input
-                    id="trailer_url"
-                    value={formData.trailer_url}
-                    onChange={(e) => setFormData(prev => ({ ...prev, trailer_url: e.target.value }))}
-                    placeholder="https://www.youtube.com/embed/..."
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Opcional: adicione um link do YouTube para o trailer do filme
-                  </p>
-                </div>
-              )}
+              {/* Trailer - Show as read-only when existing series selected */}
+              <div className="space-y-2">
+                <Label htmlFor="trailer_url">URL do Trailer (YouTube Embed)</Label>
+                <Input
+                  id="trailer_url"
+                  value={formData.trailer_url}
+                  onChange={(e) => setFormData(prev => ({ ...prev, trailer_url: e.target.value }))}
+                  placeholder="https://www.youtube.com/embed/..."
+                  disabled={isExistingSeriesSelected}
+                  className={isExistingSeriesSelected ? 'bg-muted' : ''}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {isExistingSeriesSelected 
+                    ? 'Trailer herdado da série' 
+                    : 'Opcional: adicione um link do YouTube para o trailer do filme'}
+                </p>
+              </div>
             </div>
 
             {/* Info Box */}

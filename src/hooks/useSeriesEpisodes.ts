@@ -124,15 +124,26 @@ export function useSeriesParent(seriesId: string | undefined) {
     queryFn: async (): Promise<MovieWithGenres | null> => {
       if (!seriesId) return null;
 
-      // Fetch series data
+      console.log('useSeriesParent: Fetching series parent:', seriesId);
+
+      // Fetch series data - using maybeSingle to avoid errors
       const { data: seriesData, error: seriesError } = await supabase
         .from('movies')
         .select('*')
         .eq('id', seriesId)
-        .single();
+        .maybeSingle();
 
-      if (seriesError) throw seriesError;
-      if (!seriesData) return null;
+      if (seriesError) {
+        console.error('useSeriesParent: Error fetching series:', seriesError);
+        throw seriesError;
+      }
+
+      if (!seriesData) {
+        console.warn('useSeriesParent: Series not found:', seriesId);
+        return null;
+      }
+
+      console.log('useSeriesParent: Series data fetched:', seriesData);
 
       // Fetch genres for this series
       const { data: genreLinks, error: genreLinksError } = await supabase
@@ -140,7 +151,10 @@ export function useSeriesParent(seriesId: string | undefined) {
         .select('genre_id')
         .eq('movie_id', seriesId);
 
-      if (genreLinksError) throw genreLinksError;
+      if (genreLinksError) {
+        console.error('useSeriesParent: Error fetching genre links:', genreLinksError);
+        throw genreLinksError;
+      }
 
       let genres: Genre[] = [];
       if (genreLinks && genreLinks.length > 0) {
@@ -154,12 +168,16 @@ export function useSeriesParent(seriesId: string | undefined) {
         genres = (genresData || []) as Genre[];
       }
 
-      return {
+      const result = {
         ...seriesData,
         content_type: (seriesData.content_type || 'serie') as ContentType,
         genres,
       } as MovieWithGenres;
+
+      console.log('useSeriesParent: Result with genres:', result);
+      return result;
     },
     enabled: !!seriesId,
+    staleTime: 0, // Always fetch fresh data
   });
 }
