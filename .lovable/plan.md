@@ -1,172 +1,66 @@
 
 
-# Plano: Auto-preenchimento de Dados da Série no Upload de Episódios
+# Plano: Corrigir Erro de MIME Type no Upload de Vídeo em Chunks
 
-## Problema Atual
+## Problema Identificado
 
-Quando o produtor vai subir um episódio de uma série já existente, ele precisa preencher **todos os dados novamente**:
-- Gêneros (Drama, Ficção, Aventura...)
-- Sinopse
-- Thumbnail/Capa
-- Backdrop/Banner
-- Classificação etária
-- Idioma
-- Etc.
+O bucket `videos` está configurado para aceitar apenas estes tipos MIME:
+- `video/mp4`
+- `video/webm`
+- `video/quicktime`
 
-Isso é redundante porque esses dados já existem na série pai.
+Mas a Edge Function `upload-video-chunk` está tentando salvar os chunks com `contentType: 'application/octet-stream'`, que **não está na lista de tipos permitidos**.
 
-## Solução
+Erro exato:
+```
+StorageApiError: mime type application/octet-stream is not supported
+```
 
-Quando o produtor selecionar uma série existente para vincular o episódio:
+## Solução Escolhida
 
-1. **Buscar automaticamente os dados da série pai**
-2. **Preencher o formulário** com esses dados
-3. **Mostrar apenas os campos que mudam** (temporada e episódio)
-4. **Bloquear edição** dos campos herdados (ou mostrar como read-only)
+**Adicionar `application/octet-stream` à lista de tipos MIME permitidos no bucket.**
+
+Esta é a solução mais simples e correta porque:
+1. Os chunks são dados binários temporários, não vídeos completos
+2. A função `finalize-video-upload` já faz upload do arquivo final com o tipo correto (`video/mp4`, etc.)
+3. Os chunks são deletados após a concatenação
 
 ---
 
-## Arquivos a Modificar
+## Alteração Necessária
 
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/pages/producer/UploadMovie.tsx` | Adicionar seleção de série existente e auto-preenchimento |
-| `src/hooks/useSeriesEpisodes.ts` | Adicionar hook para buscar dados completos da série pai |
+### Migration SQL
 
----
-
-## Detalhes da Implementação
-
-### 1. Novo Hook: `useSeriesParent`
-
-Buscar todos os dados da série pai (incluindo gêneros) para preencher o formulário:
-
-```typescript
-// useSeriesEpisodes.ts - Novo hook
-export function useSeriesParent(seriesId: string | undefined) {
-  return useQuery({
-    queryKey: ['series-parent', seriesId],
-    queryFn: async (): Promise<MovieWithGenres | null> => {
-      // Busca a série pai com todos os dados + gêneros
-    },
-    enabled: !!seriesId,
-  });
-}
-```
-
-### 2. Modificar Formulário do Produtor
-
-**Adicionar seletor de série existente:**
-```text
-┌────────────────────────────────────────────────────────────┐
-│  Tipo de Conteúdo: Série                                   │
-├────────────────────────────────────────────────────────────┤
-│                                                            │
-│  ○ Criar nova série                                        │
-│    (Preciso preencher todos os dados)                      │
-│                                                            │
-│  ● Adicionar episódio a série existente                    │
-│    [▼ Selecione a série                           ]        │
-│                                                            │
-│    ┌─ Dados da Série (herdados automaticamente) ─────────┐ │
-│    │ Título: Minha Série                                 │ │
-│    │ Gêneros: Drama, Suspense                            │ │
-│    │ Classificação: 14 anos                              │ │
-│    │ (Esses dados serão usados automaticamente)          │ │
-│    └─────────────────────────────────────────────────────┘ │
-│                                                            │
-│    Temporada: [ 2  ]  Episódio: [ 5  ]                     │
-│                                                            │
-└────────────────────────────────────────────────────────────┘
-```
-
-**Quando série selecionada, preencher automaticamente:**
-- `title` → Título da série + " - S01E05" (opcional, para identificação)
-- `synopsis` → Mesma sinopse da série
-- `thumbnail_url` → Mesma capa da série
-- `backdrop_url` → Mesmo banner da série
-- `genre_ids` → Mesmos gêneros da série
-- `age_rating` → Mesma classificação
-- `language` → Mesmo idioma
-- `total_seasons` → Herdado da série
-- `total_episodes` → Herdado da série
-
-**Campos que o produtor precisa informar:**
-- Número da temporada
-- Número do episódio
-- Vídeo do episódio (obrigatório)
-- Título do episódio (opcional, ex: "O Começo")
-
-### 3. Lógica de Preenchimento
-
-Quando o produtor seleciona uma série:
-
-```typescript
-// Ao selecionar série
-useEffect(() => {
-  if (selectedSeriesData) {
-    setFormData(prev => ({
-      ...prev,
-      series_id: selectedSeriesData.id,
-      synopsis: selectedSeriesData.synopsis || '',
-      thumbnail_url: selectedSeriesData.thumbnail_url || '',
-      backdrop_url: selectedSeriesData.backdrop_url || '',
-      genre_ids: selectedSeriesData.genres.map(g => g.id),
-      age_rating: selectedSeriesData.age_rating || 'L',
-      language: selectedSeriesData.language || 'portugues',
-      total_seasons: selectedSeriesData.total_seasons || null,
-      total_episodes: selectedSeriesData.total_episodes || null,
-      // Título pode ser editado, mas começa com o nome da série
-      title: selectedSeriesData.title,
-    }));
-  }
-}, [selectedSeriesData]);
+```sql
+UPDATE storage.buckets 
+SET allowed_mime_types = ARRAY['video/mp4', 'video/webm', 'video/quicktime', 'application/octet-stream']
+WHERE id = 'videos';
 ```
 
 ---
 
-## Fluxo Visual Completo
+## Fluxo de Upload (sem alterações)
 
 ```text
-Produtor seleciona "Série"
-           │
-           ▼
-┌──────────────────────────────────────┐
-│ É uma série nova ou já existente?    │
-├──────────────────────────────────────┤
-│ ○ Nova série (preencher tudo)        │
-│ ● Série existente (herdar dados)     │
-└──────────────────────────────────────┘
-           │
-           ▼ (Seleciona série existente)
-           
-┌──────────────────────────────────────┐
-│ Série: "Breaking Bad"                │
-│                                      │
-│ ✓ Gêneros herdados: Drama, Suspense  │
-│ ✓ Classificação: 16 anos             │
-│ ✓ Idioma: Português                  │
-│ ✓ Thumbnail/Banner: [preview]        │
-│                                      │
-│ ─────────────────────────────────────│
-│                                      │
-│ Qual temporada? [ 3  ]               │
-│ Qual episódio?  [ 1  ]               │
-│                                      │
-│ Título do episódio (opcional):       │
-│ [ No Thirty-Eight Snub             ] │
-│                                      │
-│ Vídeo do episódio: [UPLOAD VIDEO]    │
-│                                      │
-└──────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  1. upload-video-chunk                                          │
+│     ↓ Salva chunks com contentType: application/octet-stream    │
+│     ↓ Caminho: temp/{uploadId}/chunk_00001.bin                  │
+├─────────────────────────────────────────────────────────────────┤
+│  2. finalize-video-upload                                       │
+│     ↓ Concatena todos os chunks                                 │
+│     ↓ Salva arquivo final com contentType: video/mp4            │
+│     ↓ Caminho: movies/{uploadId}.mp4                            │
+│     ↓ Deleta chunks temporários                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Resultado Esperado
 
-1. Produtor não precisa preencher dados repetidos ao subir episódios
-2. Gêneros, sinopse, thumbnail, etc. são herdados automaticamente
-3. Produtor só preenche: temporada, episódio e o vídeo
-4. Interface mais rápida e sem erros de inconsistência entre episódios
+1. Upload de chunks funcionará normalmente
+2. Arquivos temporários serão aceitos com `application/octet-stream`
+3. Arquivo final será salvo com o tipo MIME correto do vídeo
+4. O fluxo de upload de vídeos grandes (como o de 1.70 GB) será concluído com sucesso
 
