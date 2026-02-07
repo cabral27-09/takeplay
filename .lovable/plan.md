@@ -1,50 +1,172 @@
 
 
-# Plano: Corrigir Constraint para Permitir Concessões Manuais
+# Plano: Auto-preenchimento de Dados da Série no Upload de Episódios
 
-## Problema Identificado
+## Problema Atual
 
-A tabela `producer_purchases` possui uma constraint CHECK que valida o campo `tier`:
+Quando o produtor vai subir um episódio de uma série já existente, ele precisa preencher **todos os dados novamente**:
+- Gêneros (Drama, Ficção, Aventura...)
+- Sinopse
+- Thumbnail/Capa
+- Backdrop/Banner
+- Classificação etária
+- Idioma
+- Etc.
 
-```sql
-CHECK (tier = ANY (ARRAY['produtor_anual', 'produtor_semestral', 'produtor_avulso']))
-```
-
-Quando o admin tenta conceder uploads manualmente com `tier: 'admin_grant'`, a constraint rejeita a inserção.
+Isso é redundante porque esses dados já existem na série pai.
 
 ## Solução
 
-Alterar a constraint para incluir o valor `admin_grant` na lista de valores permitidos.
+Quando o produtor selecionar uma série existente para vincular o episódio:
+
+1. **Buscar automaticamente os dados da série pai**
+2. **Preencher o formulário** com esses dados
+3. **Mostrar apenas os campos que mudam** (temporada e episódio)
+4. **Bloquear edição** dos campos herdados (ou mostrar como read-only)
 
 ---
 
-## Alteração no Banco de Dados
+## Arquivos a Modificar
 
-### Migration SQL
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/pages/producer/UploadMovie.tsx` | Adicionar seleção de série existente e auto-preenchimento |
+| `src/hooks/useSeriesEpisodes.ts` | Adicionar hook para buscar dados completos da série pai |
 
-```sql
--- Remover a constraint existente
-ALTER TABLE producer_purchases DROP CONSTRAINT producer_purchases_tier_check;
+---
 
--- Recriar com o novo valor permitido
-ALTER TABLE producer_purchases ADD CONSTRAINT producer_purchases_tier_check 
-  CHECK (tier = ANY (ARRAY['produtor_anual', 'produtor_semestral', 'produtor_avulso', 'admin_grant']));
+## Detalhes da Implementação
+
+### 1. Novo Hook: `useSeriesParent`
+
+Buscar todos os dados da série pai (incluindo gêneros) para preencher o formulário:
+
+```typescript
+// useSeriesEpisodes.ts - Novo hook
+export function useSeriesParent(seriesId: string | undefined) {
+  return useQuery({
+    queryKey: ['series-parent', seriesId],
+    queryFn: async (): Promise<MovieWithGenres | null> => {
+      // Busca a série pai com todos os dados + gêneros
+    },
+    enabled: !!seriesId,
+  });
+}
+```
+
+### 2. Modificar Formulário do Produtor
+
+**Adicionar seletor de série existente:**
+```text
+┌────────────────────────────────────────────────────────────┐
+│  Tipo de Conteúdo: Série                                   │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│  ○ Criar nova série                                        │
+│    (Preciso preencher todos os dados)                      │
+│                                                            │
+│  ● Adicionar episódio a série existente                    │
+│    [▼ Selecione a série                           ]        │
+│                                                            │
+│    ┌─ Dados da Série (herdados automaticamente) ─────────┐ │
+│    │ Título: Minha Série                                 │ │
+│    │ Gêneros: Drama, Suspense                            │ │
+│    │ Classificação: 14 anos                              │ │
+│    │ (Esses dados serão usados automaticamente)          │ │
+│    └─────────────────────────────────────────────────────┘ │
+│                                                            │
+│    Temporada: [ 2  ]  Episódio: [ 5  ]                     │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Quando série selecionada, preencher automaticamente:**
+- `title` → Título da série + " - S01E05" (opcional, para identificação)
+- `synopsis` → Mesma sinopse da série
+- `thumbnail_url` → Mesma capa da série
+- `backdrop_url` → Mesmo banner da série
+- `genre_ids` → Mesmos gêneros da série
+- `age_rating` → Mesma classificação
+- `language` → Mesmo idioma
+- `total_seasons` → Herdado da série
+- `total_episodes` → Herdado da série
+
+**Campos que o produtor precisa informar:**
+- Número da temporada
+- Número do episódio
+- Vídeo do episódio (obrigatório)
+- Título do episódio (opcional, ex: "O Começo")
+
+### 3. Lógica de Preenchimento
+
+Quando o produtor seleciona uma série:
+
+```typescript
+// Ao selecionar série
+useEffect(() => {
+  if (selectedSeriesData) {
+    setFormData(prev => ({
+      ...prev,
+      series_id: selectedSeriesData.id,
+      synopsis: selectedSeriesData.synopsis || '',
+      thumbnail_url: selectedSeriesData.thumbnail_url || '',
+      backdrop_url: selectedSeriesData.backdrop_url || '',
+      genre_ids: selectedSeriesData.genres.map(g => g.id),
+      age_rating: selectedSeriesData.age_rating || 'L',
+      language: selectedSeriesData.language || 'portugues',
+      total_seasons: selectedSeriesData.total_seasons || null,
+      total_episodes: selectedSeriesData.total_episodes || null,
+      // Título pode ser editado, mas começa com o nome da série
+      title: selectedSeriesData.title,
+    }));
+  }
+}, [selectedSeriesData]);
+```
+
+---
+
+## Fluxo Visual Completo
+
+```text
+Produtor seleciona "Série"
+           │
+           ▼
+┌──────────────────────────────────────┐
+│ É uma série nova ou já existente?    │
+├──────────────────────────────────────┤
+│ ○ Nova série (preencher tudo)        │
+│ ● Série existente (herdar dados)     │
+└──────────────────────────────────────┘
+           │
+           ▼ (Seleciona série existente)
+           
+┌──────────────────────────────────────┐
+│ Série: "Breaking Bad"                │
+│                                      │
+│ ✓ Gêneros herdados: Drama, Suspense  │
+│ ✓ Classificação: 16 anos             │
+│ ✓ Idioma: Português                  │
+│ ✓ Thumbnail/Banner: [preview]        │
+│                                      │
+│ ─────────────────────────────────────│
+│                                      │
+│ Qual temporada? [ 3  ]               │
+│ Qual episódio?  [ 1  ]               │
+│                                      │
+│ Título do episódio (opcional):       │
+│ [ No Thirty-Eight Snub             ] │
+│                                      │
+│ Vídeo do episódio: [UPLOAD VIDEO]    │
+│                                      │
+└──────────────────────────────────────┘
 ```
 
 ---
 
 ## Resultado Esperado
 
-1. O admin poderá conceder uploads manualmente sem erro
-2. Os registros manuais serão salvos com `tier: 'admin_grant'`
-3. Todas as outras validações continuam funcionando normalmente
-
----
-
-## Observação Técnica
-
-O valor `admin_grant` foi escolhido propositalmente para:
-- Diferenciar concessões manuais de compras via Stripe
-- Facilitar auditoria e relatórios
-- Manter compatibilidade com a lógica existente no `check-producer-purchase`
+1. Produtor não precisa preencher dados repetidos ao subir episódios
+2. Gêneros, sinopse, thumbnail, etc. são herdados automaticamente
+3. Produtor só preenche: temporada, episódio e o vídeo
+4. Interface mais rápida e sem erros de inconsistência entre episódios
 
