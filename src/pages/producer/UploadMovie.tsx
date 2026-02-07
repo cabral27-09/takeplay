@@ -96,23 +96,40 @@ export default function ProducerUploadMovie() {
     }
   }, [profile, isEditing]);
 
-  // Auto-fill form when selecting an existing series
+  // Auto-fill form when selecting an existing series - inherit ALL fields from parent
   useEffect(() => {
     if (selectedSeriesData && seriesMode === 'existing') {
       setFormData(prev => ({
         ...prev,
+        // Identificação
         series_id: selectedSeriesData.id,
         title: selectedSeriesData.title,
+        
+        // Detalhes
         synopsis: selectedSeriesData.synopsis || '',
-        thumbnail_url: selectedSeriesData.thumbnail_url || '',
-        backdrop_url: selectedSeriesData.backdrop_url || '',
-        genre_ids: selectedSeriesData.genres.map(g => g.id),
+        year: selectedSeriesData.year || new Date().getFullYear(),
+        duration: selectedSeriesData.duration || 90,
+        rating: selectedSeriesData.rating || 0,
+        
+        // Classificação
         age_rating: selectedSeriesData.age_rating || 'L',
         language: selectedSeriesData.language || 'portugues',
+        
+        // Mídia
+        thumbnail_url: selectedSeriesData.thumbnail_url || '',
+        backdrop_url: selectedSeriesData.backdrop_url || '',
+        trailer_url: selectedSeriesData.trailer_url || '',
+        
+        // Gêneros
+        genre_ids: selectedSeriesData.genres.map(g => g.id),
+        
+        // Estrutura da série
         total_seasons: selectedSeriesData.total_seasons || null,
         total_episodes: selectedSeriesData.total_episodes || null,
-        year: selectedSeriesData.year || new Date().getFullYear(),
+        
+        // Tier e produtor
         min_tier: selectedSeriesData.min_tier || 'free',
+        producer_type: selectedSeriesData.producer_type || 'individual',
       }));
     }
   }, [selectedSeriesData, seriesMode]);
