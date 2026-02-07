@@ -1,137 +1,105 @@
 
-# Plano: Corrigir Auto-Preenchimento ao Selecionar Série Existente
+# Plano: Adicionar Auto-Preenchimento na Página de Admin (MovieForm.tsx)
 
 ## Problema Identificado
 
-O auto-preenchimento **não funciona** porque o hook `useSeriesParent` pode estar:
+A página de admin (`/admin/movies/new`) **NÃO possui auto-preenchimento** quando uma série existente é selecionada. Ao contrário da página do produtor (`UploadMovie.tsx`), a página de admin (`MovieForm.tsx`) não usa o hook `useSeriesParent` para buscar e preencher automaticamente os dados da série pai.
 
-1. **Falhando silenciosamente** - Usando `.single()` que pode retornar erro se RLS bloquear
-2. **Não sendo ativado** - O `enabled` pode ter problemas de timing com states
-3. **Dados não chegando ao useEffect** - O `selectedSeriesData` pode estar `undefined`
-
-## Investigação no Código
-
-O fluxo atual:
-```text
-Usuário seleciona série → setSelectedSeriesId(value) → useSeriesParent(selectedSeriesId) → useEffect preenche formData
-```
-
-O problema pode estar em:
-- Hook `useSeriesParent` usando `.single()` que falha silenciosamente
-- Estado `selectedSeriesId` não sendo passado corretamente
-- RLS bloqueando a leitura (embora a série esteja published)
+**Resultado atual:** O admin seleciona "O PAPO FAZ CURVA" no dropdown, mas todos os campos abaixo (Nome da Série, Sinopse, etc.) ficam em branco.
 
 ---
 
 ## Solução
 
-### 1. Corrigir o Hook `useSeriesParent`
+### Arquivo a Modificar: `src/pages/admin/MovieForm.tsx`
 
-**Arquivo:** `src/hooks/useSeriesEpisodes.ts`
+Adicionar a mesma lógica de auto-preenchimento que existe na página do produtor:
 
-Mudanças:
-- Usar `.maybeSingle()` ao invés de `.single()` para evitar erros silenciosos
-- Adicionar log para debug
-- Garantir que o hook retorna dados corretamente
+1. **Importar o hook `useSeriesParent`**
+2. **Buscar dados quando `formData.series_id` mudar**
+3. **Preencher automaticamente TODOS os campos herdados**
+4. **Mostrar campos como read-only quando série existente for selecionada**
+
+---
+
+## Mudanças Detalhadas
+
+### 1. Adicionar Import do Hook
 
 ```typescript
-export function useSeriesParent(seriesId: string | undefined) {
-  return useQuery({
-    queryKey: ['series-parent', seriesId],
-    queryFn: async (): Promise<MovieWithGenres | null> => {
-      if (!seriesId) return null;
-
-      console.log('Fetching series parent:', seriesId);
-
-      // Fetch series data - usando maybeSingle para evitar erros
-      const { data: seriesData, error: seriesError } = await supabase
-        .from('movies')
-        .select('*')
-        .eq('id', seriesId)
-        .maybeSingle();
-
-      if (seriesError) {
-        console.error('Error fetching series:', seriesError);
-        throw seriesError;
-      }
-      
-      if (!seriesData) {
-        console.warn('Series not found:', seriesId);
-        return null;
-      }
-
-      console.log('Series data fetched:', seriesData);
-
-      // Buscar gêneros
-      const { data: genreLinks, error: genreLinksError } = await supabase
-        .from('movie_genres')
-        .select('genre_id')
-        .eq('movie_id', seriesId);
-
-      if (genreLinksError) {
-        console.error('Error fetching genre links:', genreLinksError);
-        throw genreLinksError;
-      }
-
-      let genres: Genre[] = [];
-      if (genreLinks && genreLinks.length > 0) {
-        const genreIds = genreLinks.map(gl => gl.genre_id);
-        const { data: genresData, error: genresError } = await supabase
-          .from('genres')
-          .select('*')
-          .in('id', genreIds);
-
-        if (genresError) throw genresError;
-        genres = (genresData || []) as Genre[];
-      }
-
-      const result = {
-        ...seriesData,
-        content_type: (seriesData.content_type || 'serie') as ContentType,
-        genres,
-      } as MovieWithGenres;
-
-      console.log('Series parent result:', result);
-      return result;
-    },
-    enabled: !!seriesId,
-    staleTime: 0, // Sempre buscar dados frescos
-  });
-}
+import { useSeriesListAdmin, useSeriesParent } from '@/hooks/useSeriesEpisodes';
 ```
 
-### 2. Adicionar Logs no Componente de Upload
+### 2. Adicionar Chamada do Hook
 
-**Arquivo:** `src/pages/producer/UploadMovie.tsx`
+```typescript
+// Fetch selected series data for auto-fill
+const { data: selectedSeriesData, isLoading: seriesParentLoading } = useSeriesParent(
+  formData.series_id || undefined
+);
+```
 
-Adicionar logs para debug no useEffect:
+### 3. Adicionar useEffect para Auto-Preenchimento
 
 ```typescript
 // Auto-fill form when selecting an existing series
 useEffect(() => {
-  console.log('Auto-fill effect triggered:', { 
-    selectedSeriesData, 
-    seriesMode, 
-    selectedSeriesId 
-  });
-  
-  if (selectedSeriesData && seriesMode === 'existing') {
-    console.log('Auto-filling form with series data:', selectedSeriesData);
+  if (selectedSeriesData && formData.series_id) {
+    console.log('Admin: Auto-filling form with series data:', selectedSeriesData);
     setFormData(prev => ({
-      // ... todos os campos
+      ...prev,
+      // Tipo de conteúdo
+      content_type: selectedSeriesData.content_type || 'serie',
+      
+      // Detalhes herdados
+      title: selectedSeriesData.title,
+      synopsis: selectedSeriesData.synopsis || '',
+      year: selectedSeriesData.year || new Date().getFullYear(),
+      duration: selectedSeriesData.duration || 90,
+      rating: selectedSeriesData.rating || 0,
+      
+      // Classificação
+      age_rating: selectedSeriesData.age_rating || 'L',
+      language: selectedSeriesData.language || 'portugues',
+      
+      // Mídia
+      thumbnail_url: selectedSeriesData.thumbnail_url || '',
+      backdrop_url: selectedSeriesData.backdrop_url || '',
+      trailer_url: selectedSeriesData.trailer_url || '',
+      
+      // Gêneros
+      genre_ids: selectedSeriesData.genres?.map(g => g.id) || [],
+      
+      // Estrutura da série
+      total_seasons: selectedSeriesData.total_seasons || null,
+      total_episodes: selectedSeriesData.total_episodes || null,
+      
+      // Tier e produtor
+      min_tier: selectedSeriesData.min_tier || 'free',
+      producer_type: selectedSeriesData.producer_type || 'studio',
+      producer_name: selectedSeriesData.producer_name || '',
     }));
   }
-}, [selectedSeriesData, seriesMode]);
+}, [selectedSeriesData, formData.series_id]);
 ```
 
-### 3. Mostrar Todos os Campos Preenchidos (Read-Only)
+### 4. Adicionar Variável para Verificar se Série Está Selecionada
 
-**Arquivo:** `src/pages/producer/UploadMovie.tsx`
+```typescript
+const isExistingSeriesSelected = !!formData.series_id && !!selectedSeriesData;
+```
 
-Quando `seriesMode === 'existing'` e `selectedSeriesData` existe:
-- Mostrar TODOS os campos preenchidos
-- Campos serão `disabled` (read-only)
-- Apenas `season_number`, `current_episode` e `video_url` são editáveis
+### 5. Mostrar Campos como Read-Only
+
+Quando `isExistingSeriesSelected` for `true`, os campos herdados devem:
+- Ficar com `disabled={true}`
+- Ter fundo diferente (ex: `className="bg-muted"`)
+- Mostrar badge "Herdado"
+
+Campos que ficam editáveis:
+- Temporada (`season_number`)
+- Episódio (`current_episode`)
+- Upload de vídeo
 
 ---
 
@@ -141,32 +109,30 @@ Quando `seriesMode === 'existing'` e `selectedSeriesData` existe:
 ┌────────────────────────────────────────────────────────────────────────────┐
 │ Tipo de Conteúdo: Série                                                    │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ ● Adicionar episódio a série existente                                     │
+│ Informações da Série                                                       │
+│                                                                            │
+│ Vincular a uma Série Existente                                             │
 │ [O PAPO FAZ CURVA ▼]                                                       │
+│                                                                            │
+│ Qual temporada? [  ]     Qual episódio? [  ]   ← EDITÁVEL                  │
 ├────────────────────────────────────────────────────────────────────────────┤
+│ Informações Básicas (Herdadas da Série)                                    │
 │                                                                            │
-│ ═══════════════════ DADOS HERDADOS DA SÉRIE (SOMENTE LEITURA) ════════════ │
+│ Nome da Série:  [ O PAPO FAZ CURVA ]    ← DESABILITADO + PREENCHIDO        │
+│ Sinopse:        [ Texto da série... ]   ← DESABILITADO + PREENCHIDO        │
+│ Ano:            [ 2026 ]                ← DESABILITADO + PREENCHIDO        │
+│ Duração:        [ 23 ]                  ← DESABILITADO + PREENCHIDO        │
+│ Classificação:  [ 12 anos ]             ← DESABILITADO + PREENCHIDO        │
+│ Idioma:         [ Português ]           ← DESABILITADO + PREENCHIDO        │
+├────────────────────────────────────────────────────────────────────────────┤
+│ Gêneros (Herdados)                                                         │
+│ [✓] Aventura                            ← DESABILITADO + PREENCHIDO        │
+├────────────────────────────────────────────────────────────────────────────┤
+│ Mídia                                                                      │
+│ Thumbnail: [🖼️ imagem atual]            ← DESABILITADO + PREVIEW           │
+│ Banner:    [🖼️ imagem atual]            ← DESABILITADO + PREVIEW           │
 │                                                                            │
-│ Nome da Série:        [ O PAPO FAZ CURVA                    ] (desabilitado) │
-│ Sinopse:              [ Um grupo de pessoas...              ] (desabilitado) │
-│ Ano:                  [ 2026                                ] (desabilitado) │
-│ Duração por episódio: [ 23 min                              ] (desabilitado) │
-│ Classificação:        [ 12 anos                             ] (desabilitado) │
-│ Idioma:               [ Português                           ] (desabilitado) │
-│ Gêneros:              [■ Aventura]                            (desabilitado) │
-│ Tier:                 [ Standard                            ] (desabilitado) │
-│                                                                            │
-│ Thumbnail:  [🖼️ imagem atual]                                (desabilitado) │
-│ Banner:     [🖼️ imagem atual]                                (desabilitado) │
-│ Trailer:    [ https://youtube.com/...                     ] (desabilitado) │
-│                                                                            │
-│ ═════════════════════════ INFORMAÇÕES DO EPISÓDIO ═════════════════════════ │
-│                                                                            │
-│ Qual temporada?  [ 1  ]                              ← EDITÁVEL             │
-│ Qual episódio?   [ 3  ]                              ← EDITÁVEL             │
-│                                                                            │
-│ Vídeo do Episódio:  [📹 UPLOAD VIDEO]                ← EDITÁVEL             │
-│                                                                            │
+│ Vídeo do Episódio: [UPLOAD]             ← EDITÁVEL                         │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -176,29 +142,14 @@ Quando `seriesMode === 'existing'` e `selectedSeriesData` existe:
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/hooks/useSeriesEpisodes.ts` | Corrigir hook com `.maybeSingle()` e adicionar logs |
-| `src/pages/producer/UploadMovie.tsx` | Mostrar todos os campos preenchidos como read-only quando série existente selecionada |
+| `src/pages/admin/MovieForm.tsx` | Adicionar hook `useSeriesParent`, useEffect de auto-fill, e campos disabled quando série selecionada |
 
 ---
 
-## Detalhes Técnicos
+## Benefícios
 
-### Mudança no UI (UploadMovie.tsx)
+1. Admin só precisa informar temporada, episódio e fazer upload do vídeo
+2. Todos os metadados são herdados automaticamente da série pai
+3. Consistência visual entre páginas de admin e produtor
+4. Evita erros de digitação e inconsistências nos dados
 
-Quando `seriesMode === 'existing'` e `selectedSeriesData` existe:
-
-1. **Seção "Informações Básicas"** - Mostrar com campos `disabled`:
-   - Título (preenchido automaticamente)
-   - Sinopse (preenchida automaticamente)
-   - Ano, Duração, Classificação, Idioma (preenchidos)
-
-2. **Seção "Gêneros"** - Mostrar gêneros selecionados com checkboxes `disabled`
-
-3. **Seção "Imagens"** - Mostrar previews das imagens (não editável)
-
-4. **Seção "Episódio"** - ÚNICA seção editável:
-   - Temporada (editável)
-   - Número do episódio (editável)
-   - Upload de vídeo (editável)
-
-Isso garante que o produtor veja claramente o que foi herdado e o que precisa preencher.
