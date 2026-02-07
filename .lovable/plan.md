@@ -1,155 +1,147 @@
 
-# Plano: Adicionar Auto-Preenchimento na Página de Admin (MovieForm.tsx)
+# Plano: Implementar Upload com TUS Protocol
 
-## Problema Identificado
+## Problema Atual
 
-A página de admin (`/admin/movies/new`) **NÃO possui auto-preenchimento** quando uma série existente é selecionada. Ao contrário da página do produtor (`UploadMovie.tsx`), a página de admin (`MovieForm.tsx`) não usa o hook `useSeriesParent` para buscar e preencher automaticamente os dados da série pai.
+A Edge Function `finalize-video-upload` estoura a memória (~150MB limite) ao tentar baixar e concatenar 1.70GB de chunks. Este é um limite técnico impossível de contornar com a abordagem atual.
 
-**Resultado atual:** O admin seleciona "O PAPO FAZ CURVA" no dropdown, mas todos os campos abaixo (Nome da Série, Sinopse, etc.) ficam em branco.
+## Solução: Upload Direto via TUS
+
+O protocolo TUS permite upload resumível diretamente do navegador para o Supabase Storage, sem passar por Edge Functions.
+
+```text
+ANTES (quebrado):
+┌─────────┐      ┌────────────────────┐      ┌─────────┐
+│ Browser │ ──▶ │ Edge Function      │ ──▶ │ Storage │
+│         │      │ (baixa TUDO na RAM)│      │         │
+└─────────┘      └────────────────────┘      └─────────┘
+                        ⬆️ ESTOURA
+
+DEPOIS (funciona):
+┌─────────┐                                   ┌─────────┐
+│ Browser │ ─────── TUS Protocol ──────────▶ │ Storage │
+│         │                                   │         │
+└─────────┘                                   └─────────┘
+```
 
 ---
 
-## Solução
+## Arquivo a Modificar
 
-### Arquivo a Modificar: `src/pages/admin/MovieForm.tsx`
-
-Adicionar a mesma lógica de auto-preenchimento que existe na página do produtor:
-
-1. **Importar o hook `useSeriesParent`**
-2. **Buscar dados quando `formData.series_id` mudar**
-3. **Preencher automaticamente TODOS os campos herdados**
-4. **Mostrar campos como read-only quando série existente for selecionada**
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/components/admin/VideoUploader.tsx` | Reescrever usando `tus-js-client` |
 
 ---
 
 ## Mudanças Detalhadas
 
-### 1. Adicionar Import do Hook
+### 1. Importar tus-js-client
 
 ```typescript
-import { useSeriesListAdmin, useSeriesParent } from '@/hooks/useSeriesEpisodes';
+import * as tus from 'tus-js-client';
 ```
 
-### 2. Adicionar Chamada do Hook
+### 2. Configurar Endpoint TUS
 
 ```typescript
-// Fetch selected series data for auto-fill
-const { data: selectedSeriesData, isLoading: seriesParentLoading } = useSeriesParent(
-  formData.series_id || undefined
-);
+const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+const TUS_ENDPOINT = `https://${SUPABASE_PROJECT_ID}.supabase.co/storage/v1/upload/resumable`;
 ```
 
-### 3. Adicionar useEffect para Auto-Preenchimento
+### 3. Nova Lógica de Upload
 
 ```typescript
-// Auto-fill form when selecting an existing series
-useEffect(() => {
-  if (selectedSeriesData && formData.series_id) {
-    console.log('Admin: Auto-filling form with series data:', selectedSeriesData);
-    setFormData(prev => ({
-      ...prev,
-      // Tipo de conteúdo
-      content_type: selectedSeriesData.content_type || 'serie',
-      
-      // Detalhes herdados
-      title: selectedSeriesData.title,
-      synopsis: selectedSeriesData.synopsis || '',
-      year: selectedSeriesData.year || new Date().getFullYear(),
-      duration: selectedSeriesData.duration || 90,
-      rating: selectedSeriesData.rating || 0,
-      
-      // Classificação
-      age_rating: selectedSeriesData.age_rating || 'L',
-      language: selectedSeriesData.language || 'portugues',
-      
-      // Mídia
-      thumbnail_url: selectedSeriesData.thumbnail_url || '',
-      backdrop_url: selectedSeriesData.backdrop_url || '',
-      trailer_url: selectedSeriesData.trailer_url || '',
-      
-      // Gêneros
-      genre_ids: selectedSeriesData.genres?.map(g => g.id) || [],
-      
-      // Estrutura da série
-      total_seasons: selectedSeriesData.total_seasons || null,
-      total_episodes: selectedSeriesData.total_episodes || null,
-      
-      // Tier e produtor
-      min_tier: selectedSeriesData.min_tier || 'free',
-      producer_type: selectedSeriesData.producer_type || 'studio',
-      producer_name: selectedSeriesData.producer_name || '',
-    }));
+const startUpload = async (file: File) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return; // handle error
+
+  const fileExt = file.name.split('.').pop();
+  const filePath = `movies/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+  const upload = new tus.Upload(file, {
+    endpoint: TUS_ENDPOINT,
+    retryDelays: [0, 3000, 5000, 10000, 20000],
+    headers: {
+      authorization: `Bearer ${session.access_token}`,
+      'x-upsert': 'true',
+    },
+    uploadDataDuringCreation: true,
+    removeFingerprintOnSuccess: true,
+    metadata: {
+      bucketName: 'videos',
+      objectName: filePath,
+      contentType: file.type,
+      cacheControl: '3600',
+    },
+    chunkSize: 6 * 1024 * 1024, // 6MB - obrigatório pelo Supabase
+    onError: (error) => {
+      setError({ title: 'Erro no upload', description: error.message });
+      setIsUploading(false);
+    },
+    onProgress: (bytesUploaded, bytesTotal) => {
+      setProgress(Math.round((bytesUploaded / bytesTotal) * 100));
+      // calcular velocidade...
+    },
+    onSuccess: () => {
+      onChange(filePath);
+      toast({ title: 'Upload concluído' });
+    },
+  });
+
+  uploadRef.current = upload;
+
+  // Verificar uploads anteriores para retomar automaticamente
+  const previousUploads = await upload.findPreviousUploads();
+  if (previousUploads.length > 0) {
+    upload.resumeFromPreviousUpload(previousUploads[0]);
   }
-}, [selectedSeriesData, formData.series_id]);
+
+  upload.start();
+};
 ```
 
-### 4. Adicionar Variável para Verificar se Série Está Selecionada
+### 4. Pausar e Retomar
 
 ```typescript
-const isExistingSeriesSelected = !!formData.series_id && !!selectedSeriesData;
-```
+const handlePause = () => {
+  uploadRef.current?.abort();
+  setIsPaused(true);
+};
 
-### 5. Mostrar Campos como Read-Only
-
-Quando `isExistingSeriesSelected` for `true`, os campos herdados devem:
-- Ficar com `disabled={true}`
-- Ter fundo diferente (ex: `className="bg-muted"`)
-- Mostrar badge "Herdado"
-
-Campos que ficam editáveis:
-- Temporada (`season_number`)
-- Episódio (`current_episode`)
-- Upload de vídeo
-
----
-
-## Resultado Visual Esperado
-
-```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│ Tipo de Conteúdo: Série                                                    │
-├────────────────────────────────────────────────────────────────────────────┤
-│ Informações da Série                                                       │
-│                                                                            │
-│ Vincular a uma Série Existente                                             │
-│ [O PAPO FAZ CURVA ▼]                                                       │
-│                                                                            │
-│ Qual temporada? [  ]     Qual episódio? [  ]   ← EDITÁVEL                  │
-├────────────────────────────────────────────────────────────────────────────┤
-│ Informações Básicas (Herdadas da Série)                                    │
-│                                                                            │
-│ Nome da Série:  [ O PAPO FAZ CURVA ]    ← DESABILITADO + PREENCHIDO        │
-│ Sinopse:        [ Texto da série... ]   ← DESABILITADO + PREENCHIDO        │
-│ Ano:            [ 2026 ]                ← DESABILITADO + PREENCHIDO        │
-│ Duração:        [ 23 ]                  ← DESABILITADO + PREENCHIDO        │
-│ Classificação:  [ 12 anos ]             ← DESABILITADO + PREENCHIDO        │
-│ Idioma:         [ Português ]           ← DESABILITADO + PREENCHIDO        │
-├────────────────────────────────────────────────────────────────────────────┤
-│ Gêneros (Herdados)                                                         │
-│ [✓] Aventura                            ← DESABILITADO + PREENCHIDO        │
-├────────────────────────────────────────────────────────────────────────────┤
-│ Mídia                                                                      │
-│ Thumbnail: [🖼️ imagem atual]            ← DESABILITADO + PREVIEW           │
-│ Banner:    [🖼️ imagem atual]            ← DESABILITADO + PREVIEW           │
-│                                                                            │
-│ Vídeo do Episódio: [UPLOAD]             ← EDITÁVEL                         │
-└────────────────────────────────────────────────────────────────────────────┘
+const handleResume = () => {
+  uploadRef.current?.start();
+  setIsPaused(false);
+};
 ```
 
 ---
 
-## Arquivos a Modificar
+## O Que Será Removido
 
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/pages/admin/MovieForm.tsx` | Adicionar hook `useSeriesParent`, useEffect de auto-fill, e campos disabled quando série selecionada |
+- Função `uploadChunk()` - não mais necessária
+- Função `finalizeUpload()` - não mais necessária  
+- Estado manual no localStorage (`video_upload_state`) - TUS gerencia automaticamente
+- Constante `CHUNK_SIZE = 50MB` - TUS usa 6MB obrigatório
 
 ---
 
 ## Benefícios
 
-1. Admin só precisa informar temporada, episódio e fazer upload do vídeo
-2. Todos os metadados são herdados automaticamente da série pai
-3. Consistência visual entre páginas de admin e produtor
-4. Evita erros de digitação e inconsistências nos dados
+| Antes | Depois |
+|-------|--------|
+| Limite de ~1GB (memória da Edge Function) | Suporta até 6GB (limite do bucket) |
+| Precisa de 2 Edge Functions | Upload direto, sem Edge Functions |
+| Pausa/retomada manual via localStorage | Pausa/retomada nativa do TUS |
+| ~250 linhas de código | ~100 linhas de código |
 
+---
+
+## UI Mantida
+
+A interface visual permanece igual:
+- Área de drag & drop
+- Barra de progresso
+- Velocidade de upload
+- Botões Pausar/Continuar/Cancelar
+- Validação de tipo e tamanho
