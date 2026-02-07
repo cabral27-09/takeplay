@@ -99,8 +99,12 @@ export default function ProducerUploadMovie() {
   // Auto-fill form when selecting an existing series - inherit ALL fields from parent
   useEffect(() => {
     if (selectedSeriesData && seriesMode === 'existing') {
+      console.log('Auto-filling from series:', selectedSeriesData);
       setFormData(prev => ({
         ...prev,
+        // Tipo de conteúdo (sempre série quando vem da série pai)
+        content_type: selectedSeriesData.content_type || 'serie',
+        
         // Identificação
         series_id: selectedSeriesData.id,
         title: selectedSeriesData.title,
@@ -120,8 +124,8 @@ export default function ProducerUploadMovie() {
         backdrop_url: selectedSeriesData.backdrop_url || '',
         trailer_url: selectedSeriesData.trailer_url || '',
         
-        // Gêneros
-        genre_ids: selectedSeriesData.genres.map(g => g.id),
+        // Gêneros - herda diretamente da série pai
+        genre_ids: selectedSeriesData.genres?.map(g => g.id) || [],
         
         // Estrutura da série
         total_seasons: selectedSeriesData.total_seasons || null,
@@ -130,6 +134,7 @@ export default function ProducerUploadMovie() {
         // Tier e produtor
         min_tier: selectedSeriesData.min_tier || 'free',
         producer_type: selectedSeriesData.producer_type || 'individual',
+        producer_name: selectedSeriesData.producer_name || prev.producer_name,
       }));
     }
   }, [selectedSeriesData, seriesMode]);
