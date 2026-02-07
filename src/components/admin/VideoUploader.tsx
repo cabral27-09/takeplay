@@ -14,7 +14,7 @@ interface VideoUploaderProps {
 }
 
 const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-const TUS_ENDPOINT = `https://${SUPABASE_PROJECT_ID}.supabase.co/storage/v1/upload/resumable`;
+const TUS_ENDPOINT = `https://${SUPABASE_PROJECT_ID}.storage.supabase.co/storage/v1/upload/resumable`;
 
 export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps) {
   const [isUploading, setIsUploading] = useState(false);
