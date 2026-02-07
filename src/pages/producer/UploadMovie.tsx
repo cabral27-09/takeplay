@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Save, Loader2, Clock, CheckCircle, XCircle, Film, Upload } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Clock, CheckCircle, XCircle, Film, Upload, Info } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { VideoUploader } from '@/components/admin/VideoUploader';
 import { ImageUploader } from '@/components/admin/ImageUploader';
 import { UploadGate } from '@/components/producer/UploadGate';
@@ -16,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useMovie, useCreateMovie, useUpdateMovie } from '@/hooks/useMovies';
 import { useGenresByContentType } from '@/hooks/useGenres';
 import { useProducerPurchase } from '@/hooks/useProducerPurchase';
+import { useProducerSeriesList, useSeriesParent } from '@/hooks/useSeriesEpisodes';
 import { useToast } from '@/hooks/use-toast';
 import { Navigate, Link } from 'react-router-dom';
 import type { MovieFormData, MovieStatus, AgeRating, ContentLanguage, ContentType } from '@/types/movie';
@@ -46,6 +48,10 @@ export default function ProducerUploadMovie() {
   const { purchaseInfo, recordUpload } = useProducerPurchase();
   const { toast } = useToast();
 
+  // Series mode: 'new' = create new series, 'existing' = add episode to existing series
+  const [seriesMode, setSeriesMode] = useState<'new' | 'existing'>('new');
+  const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
+
   const [formData, setFormData] = useState<MovieFormData>({
     title: '',
     synopsis: '',
@@ -74,6 +80,14 @@ export default function ProducerUploadMovie() {
 
   // Fetch genres based on content type - must be after formData declaration
   const { data: genres, isLoading: genresLoading } = useGenresByContentType(formData.content_type);
+  
+  // Fetch producer's series list for the dropdown
+  const { data: producerSeries, isLoading: producerSeriesLoading } = useProducerSeriesList(profile?.full_name);
+  
+  // Fetch selected series data for auto-fill
+  const { data: selectedSeriesData, isLoading: seriesParentLoading } = useSeriesParent(
+    seriesMode === 'existing' ? selectedSeriesId || undefined : undefined
+  );
 
   // Set producer name from profile
   useEffect(() => {
@@ -82,7 +96,35 @@ export default function ProducerUploadMovie() {
     }
   }, [profile, isEditing]);
 
-  // Load movie data for editing
+  // Auto-fill form when selecting an existing series
+  useEffect(() => {
+    if (selectedSeriesData && seriesMode === 'existing') {
+      setFormData(prev => ({
+        ...prev,
+        series_id: selectedSeriesData.id,
+        title: selectedSeriesData.title,
+        synopsis: selectedSeriesData.synopsis || '',
+        thumbnail_url: selectedSeriesData.thumbnail_url || '',
+        backdrop_url: selectedSeriesData.backdrop_url || '',
+        genre_ids: selectedSeriesData.genres.map(g => g.id),
+        age_rating: selectedSeriesData.age_rating || 'L',
+        language: selectedSeriesData.language || 'portugues',
+        total_seasons: selectedSeriesData.total_seasons || null,
+        total_episodes: selectedSeriesData.total_episodes || null,
+        year: selectedSeriesData.year || new Date().getFullYear(),
+        min_tier: selectedSeriesData.min_tier || 'free',
+      }));
+    }
+  }, [selectedSeriesData, seriesMode]);
+
+  // Reset series fields when switching modes
+  useEffect(() => {
+    if (seriesMode === 'new') {
+      setSelectedSeriesId(null);
+      // Only reset series_id, keep other fields
+      setFormData(prev => ({ ...prev, series_id: null }));
+    }
+  }, [seriesMode]);
   useEffect(() => {
     if (movie && isEditing) {
       // Only allow editing if it's the producer's movie and in allowed status
@@ -268,8 +310,9 @@ export default function ProducerUploadMovie() {
     }));
   };
 
-  const isLoading = authLoading || (isEditing && movieLoading) || genresLoading;
+  const isLoading = authLoading || (isEditing && movieLoading) || genresLoading || producerSeriesLoading;
   const isSaving = createMovie.isPending || updateMovie.isPending;
+  const isExistingSeriesSelected = seriesMode === 'existing' && !!selectedSeriesData;
 
   // Show current status if editing
   const currentStatus = isEditing && movie ? STATUS_CONFIG[movie.status] : null;
@@ -399,19 +442,126 @@ export default function ProducerUploadMovie() {
                   Informações da Série
                 </h2>
                 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="total_seasons">Quantas temporadas tem a série? *</Label>
-                    <Input
-                      id="total_seasons"
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={formData.total_seasons || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, total_seasons: parseInt(e.target.value) || null }))}
-                      placeholder="Ex: 3"
-                    />
+                {/* Series Mode Selection - Only for new content, not editing */}
+                {!isEditing && producerSeries && producerSeries.length > 0 && (
+                  <div className="space-y-4">
+                    <Label>É uma série nova ou já existente?</Label>
+                    <RadioGroup
+                      value={seriesMode}
+                      onValueChange={(value: 'new' | 'existing') => setSeriesMode(value)}
+                      className="flex gap-4"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="new" id="series-new" />
+                        <Label htmlFor="series-new" className="cursor-pointer font-normal">
+                          Criar nova série
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="existing" id="series-existing" />
+                        <Label htmlFor="series-existing" className="cursor-pointer font-normal">
+                          Adicionar episódio a série existente
+                        </Label>
+                      </div>
+                    </RadioGroup>
                   </div>
+                )}
+
+                {/* Existing Series Selector */}
+                {seriesMode === 'existing' && !isEditing && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="existing_series">Selecione a série *</Label>
+                      <Select
+                        value={selectedSeriesId || ''}
+                        onValueChange={(value) => setSelectedSeriesId(value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Escolha uma série..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {producerSeries?.map((series) => (
+                            <SelectItem key={series.id} value={series.id}>
+                              {series.title}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Show inherited data preview */}
+                    {selectedSeriesData && (
+                      <div className="p-4 rounded-lg bg-muted/50 border border-border space-y-2">
+                        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                          <Info className="h-4 w-4" />
+                          Dados herdados da série
+                        </div>
+                        <div className="grid gap-2 text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">Gêneros:</span>
+                            <div className="flex gap-1 flex-wrap">
+                              {selectedSeriesData.genres.map(g => (
+                                <Badge key={g.id} variant="secondary" className="text-xs">
+                                  {g.name}
+                                </Badge>
+                              ))}
+                              {selectedSeriesData.genres.length === 0 && (
+                                <span className="text-muted-foreground italic">Nenhum gênero definido</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">Classificação:</span>
+                            <span>{selectedSeriesData.age_rating} anos</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">Idioma:</span>
+                            <span className="capitalize">{selectedSeriesData.language}</span>
+                          </div>
+                          {selectedSeriesData.thumbnail_url && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-muted-foreground">Thumbnail:</span>
+                              <img 
+                                src={selectedSeriesData.thumbnail_url} 
+                                alt="Thumbnail da série" 
+                                className="h-16 w-auto rounded border"
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          ✓ Esses dados serão usados automaticamente para o episódio
+                        </p>
+                      </div>
+                    )}
+
+                    {seriesParentLoading && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Carregando dados da série...
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Episode fields - Always shown for series */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  {/* Only show total_seasons for new series */}
+                  {(seriesMode === 'new' || isEditing) && (
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="total_seasons">Quantas temporadas tem a série? *</Label>
+                      <Input
+                        id="total_seasons"
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={formData.total_seasons || ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, total_seasons: parseInt(e.target.value) || null }))}
+                        placeholder="Ex: 3"
+                        disabled={isExistingSeriesSelected}
+                      />
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="season_number">Qual temporada é este vídeo? *</Label>
@@ -439,171 +589,182 @@ export default function ProducerUploadMovie() {
                     />
                   </div>
 
+                  {/* Only show total_episodes for new series */}
+                  {(seriesMode === 'new' || isEditing) && (
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="total_episodes">Total de episódios da série (opcional)</Label>
+                      <Input
+                        id="total_episodes"
+                        type="number"
+                        min={1}
+                        max={9999}
+                        value={formData.total_episodes || ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, total_episodes: parseInt(e.target.value) || null }))}
+                        placeholder="Ex: 24"
+                        disabled={isExistingSeriesSelected}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Informe o total de episódios considerando todas as temporadas
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Basic Info - Hidden fields when existing series selected */}
+            {!isExistingSeriesSelected && (
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold border-b border-border pb-2">
+                  Informações Básicas
+                </h2>
+                
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="total_episodes">Total de episódios da série (opcional)</Label>
+                    <Label htmlFor="title">
+                      {formData.content_type === 'serie' ? 'Nome da Série *' : 'Título *'}
+                    </Label>
                     <Input
-                      id="total_episodes"
+                      id="title"
+                      value={formData.title}
+                      onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder={formData.content_type === 'serie' ? 'Nome da série' : formData.content_type === 'espetaculo' ? 'Nome do espetáculo' : 'Nome do filme'}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="synopsis">Sinopse *</Label>
+                    <Textarea
+                      id="synopsis"
+                      value={formData.synopsis}
+                      onChange={(e) => setFormData(prev => ({ ...prev, synopsis: e.target.value }))}
+                      placeholder="Descrição do filme..."
+                      rows={4}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="year">Ano de Produção</Label>
+                    <Input
+                      id="year"
+                      type="number"
+                      min={1900}
+                      max={2100}
+                      value={formData.year}
+                      onChange={(e) => setFormData(prev => ({ ...prev, year: parseInt(e.target.value) || 0 }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="duration">Duração (minutos)</Label>
+                    <Input
+                      id="duration"
                       type="number"
                       min={1}
-                      max={9999}
-                      value={formData.total_episodes || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, total_episodes: parseInt(e.target.value) || null }))}
-                      placeholder="Ex: 24"
+                      max={600}
+                      value={formData.duration}
+                      onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Informe o total de episódios considerando todas as temporadas
-                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="age_rating">Classificação Etária *</Label>
+                    <Select
+                      value={formData.age_rating}
+                      onValueChange={(value: AgeRating) => 
+                        setFormData(prev => ({ ...prev, age_rating: value }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="L">L - Livre para todos</SelectItem>
+                        <SelectItem value="10">10 - Não recomendado para menores de 10 anos</SelectItem>
+                        <SelectItem value="12">12 - Não recomendado para menores de 12 anos</SelectItem>
+                        <SelectItem value="14">14 - Não recomendado para menores de 14 anos</SelectItem>
+                        <SelectItem value="16">16 - Não recomendado para menores de 16 anos</SelectItem>
+                        <SelectItem value="18">18 - Não recomendado para menores de 18 anos</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="language">Idioma do Áudio *</Label>
+                    <Select
+                      value={formData.language}
+                      onValueChange={(value: ContentLanguage) => 
+                        setFormData(prev => ({ ...prev, language: value }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="portugues">Português</SelectItem>
+                        <SelectItem value="ingles">Inglês</SelectItem>
+                        <SelectItem value="espanhol">Espanhol</SelectItem>
+                        <SelectItem value="outro">Outro</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Basic Info */}
-            <div className="space-y-4">
-              <h2 className="text-lg font-semibold border-b border-border pb-2">
-                Informações Básicas
-              </h2>
-              
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="title">
-                    {formData.content_type === 'serie' ? 'Nome da Série *' : 'Título *'}
-                  </Label>
-                  <Input
-                    id="title"
-                    value={formData.title}
-                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder={formData.content_type === 'serie' ? 'Nome da série' : formData.content_type === 'espetaculo' ? 'Nome do espetáculo' : 'Nome do filme'}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="synopsis">Sinopse *</Label>
-                  <Textarea
-                    id="synopsis"
-                    value={formData.synopsis}
-                    onChange={(e) => setFormData(prev => ({ ...prev, synopsis: e.target.value }))}
-                    placeholder="Descrição do filme..."
-                    rows={4}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="year">Ano de Produção</Label>
-                  <Input
-                    id="year"
-                    type="number"
-                    min={1900}
-                    max={2100}
-                    value={formData.year}
-                    onChange={(e) => setFormData(prev => ({ ...prev, year: parseInt(e.target.value) || 0 }))}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="duration">Duração (minutos)</Label>
-                  <Input
-                    id="duration"
-                    type="number"
-                    min={1}
-                    max={600}
-                    value={formData.duration}
-                    onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="age_rating">Classificação Etária *</Label>
-                  <Select
-                    value={formData.age_rating}
-                    onValueChange={(value: AgeRating) => 
-                      setFormData(prev => ({ ...prev, age_rating: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="L">L - Livre para todos</SelectItem>
-                      <SelectItem value="10">10 - Não recomendado para menores de 10 anos</SelectItem>
-                      <SelectItem value="12">12 - Não recomendado para menores de 12 anos</SelectItem>
-                      <SelectItem value="14">14 - Não recomendado para menores de 14 anos</SelectItem>
-                      <SelectItem value="16">16 - Não recomendado para menores de 16 anos</SelectItem>
-                      <SelectItem value="18">18 - Não recomendado para menores de 18 anos</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="language">Idioma do Áudio *</Label>
-                  <Select
-                    value={formData.language}
-                    onValueChange={(value: ContentLanguage) => 
-                      setFormData(prev => ({ ...prev, language: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="portugues">Português</SelectItem>
-                      <SelectItem value="ingles">Inglês</SelectItem>
-                      <SelectItem value="espanhol">Espanhol</SelectItem>
-                      <SelectItem value="outro">Outro</SelectItem>
-                    </SelectContent>
-                  </Select>
+            {/* Genres - Hidden when existing series selected */}
+            {!isExistingSeriesSelected && (
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold border-b border-border pb-2">
+                  Gêneros
+                </h2>
+                
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {genres?.map((genre) => (
+                    <label
+                      key={genre.id}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={formData.genre_ids.includes(genre.id)}
+                        onCheckedChange={() => handleGenreToggle(genre.id)}
+                      />
+                      <span className="text-sm">{genre.name}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
-            </div>
-
-            {/* Genres */}
-            <div className="space-y-4">
-              <h2 className="text-lg font-semibold border-b border-border pb-2">
-                Gêneros
-              </h2>
-              
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {genres?.map((genre) => (
-                  <label
-                    key={genre.id}
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <Checkbox
-                      checked={formData.genre_ids.includes(genre.id)}
-                      onCheckedChange={() => handleGenreToggle(genre.id)}
-                    />
-                    <span className="text-sm">{genre.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+            )}
 
             {/* Media */}
             <div className="space-y-4">
               <h2 className="text-lg font-semibold border-b border-border pb-2">
-                Mídia
+                {isExistingSeriesSelected ? 'Vídeo do Episódio' : 'Mídia'}
               </h2>
               
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Capa do Filme (2:3) *</Label>
-                  <ImageUploader
-                    value={formData.thumbnail_url}
-                    onChange={(url) => setFormData(prev => ({ ...prev, thumbnail_url: url }))}
-                    aspectRatio="thumbnail"
-                  />
-                </div>
+              {/* Thumbnail and Backdrop - Hidden when existing series selected */}
+              {!isExistingSeriesSelected && (
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Capa do Filme (2:3) *</Label>
+                    <ImageUploader
+                      value={formData.thumbnail_url}
+                      onChange={(url) => setFormData(prev => ({ ...prev, thumbnail_url: url }))}
+                      aspectRatio="thumbnail"
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label>Banner (16:9)</Label>
-                  <ImageUploader
-                    value={formData.backdrop_url}
-                    onChange={(url) => setFormData(prev => ({ ...prev, backdrop_url: url }))}
-                    aspectRatio="backdrop"
-                  />
+                  <div className="space-y-2">
+                    <Label>Banner (16:9)</Label>
+                    <ImageUploader
+                      value={formData.backdrop_url}
+                      onChange={(url) => setFormData(prev => ({ ...prev, backdrop_url: url }))}
+                      aspectRatio="backdrop"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="space-y-2">
                 <Label>
@@ -619,18 +780,21 @@ export default function ProducerUploadMovie() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="trailer_url">URL do Trailer (YouTube Embed)</Label>
-                <Input
-                  id="trailer_url"
-                  value={formData.trailer_url}
-                  onChange={(e) => setFormData(prev => ({ ...prev, trailer_url: e.target.value }))}
-                  placeholder="https://www.youtube.com/embed/..."
-                />
-                <p className="text-xs text-muted-foreground">
-                  Opcional: adicione um link do YouTube para o trailer do filme
-                </p>
-              </div>
+              {/* Trailer - Hidden when existing series selected */}
+              {!isExistingSeriesSelected && (
+                <div className="space-y-2">
+                  <Label htmlFor="trailer_url">URL do Trailer (YouTube Embed)</Label>
+                  <Input
+                    id="trailer_url"
+                    value={formData.trailer_url}
+                    onChange={(e) => setFormData(prev => ({ ...prev, trailer_url: e.target.value }))}
+                    placeholder="https://www.youtube.com/embed/..."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Opcional: adicione um link do YouTube para o trailer do filme
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Info Box */}

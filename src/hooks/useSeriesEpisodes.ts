@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import type { Movie, ContentType } from '@/types/movie';
+import type { Movie, ContentType, MovieWithGenres, Genre } from '@/types/movie';
 
 export interface Episode extends Omit<Movie, 'series_id'> {
   series_id: string;
@@ -92,5 +92,74 @@ export function useSeriesListAdmin() {
       if (error) throw error;
       return data || [];
     },
+  });
+}
+
+// Fetch producer's own series (for episode upload flow)
+export function useProducerSeriesList(producerName: string | null | undefined) {
+  return useQuery({
+    queryKey: ['producer-series-list', producerName],
+    queryFn: async () => {
+      if (!producerName) return [];
+      
+      const { data, error } = await supabase
+        .from('movies')
+        .select('id, title, status')
+        .eq('content_type', 'serie')
+        .is('series_id', null)
+        .eq('producer_name', producerName)
+        .order('title', { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!producerName,
+  });
+}
+
+// Fetch series parent data with genres for auto-fill
+export function useSeriesParent(seriesId: string | undefined) {
+  return useQuery({
+    queryKey: ['series-parent', seriesId],
+    queryFn: async (): Promise<MovieWithGenres | null> => {
+      if (!seriesId) return null;
+
+      // Fetch series data
+      const { data: seriesData, error: seriesError } = await supabase
+        .from('movies')
+        .select('*')
+        .eq('id', seriesId)
+        .single();
+
+      if (seriesError) throw seriesError;
+      if (!seriesData) return null;
+
+      // Fetch genres for this series
+      const { data: genreLinks, error: genreLinksError } = await supabase
+        .from('movie_genres')
+        .select('genre_id')
+        .eq('movie_id', seriesId);
+
+      if (genreLinksError) throw genreLinksError;
+
+      let genres: Genre[] = [];
+      if (genreLinks && genreLinks.length > 0) {
+        const genreIds = genreLinks.map(gl => gl.genre_id);
+        const { data: genresData, error: genresError } = await supabase
+          .from('genres')
+          .select('*')
+          .in('id', genreIds);
+
+        if (genresError) throw genresError;
+        genres = (genresData || []) as Genre[];
+      }
+
+      return {
+        ...seriesData,
+        content_type: (seriesData.content_type || 'serie') as ContentType,
+        genres,
+      } as MovieWithGenres;
+    },
+    enabled: !!seriesId,
   });
 }
