@@ -1,66 +1,123 @@
 
 
-# Plano: Corrigir Erro de MIME Type no Upload de Vídeo em Chunks
+# Plano: Completar Auto-Preenchimento de Todos os Campos da Série
 
-## Problema Identificado
+## Situação Atual
 
-O bucket `videos` está configurado para aceitar apenas estes tipos MIME:
-- `video/mp4`
-- `video/webm`
-- `video/quicktime`
+Quando o produtor seleciona uma série existente, o sistema já preenche automaticamente **alguns** campos:
+- ✅ `series_id` 
+- ✅ `title`
+- ✅ `synopsis`
+- ✅ `thumbnail_url`
+- ✅ `backdrop_url`
+- ✅ `genre_ids`
+- ✅ `age_rating`
+- ✅ `language`
+- ✅ `total_seasons`
+- ✅ `total_episodes`
+- ✅ `year`
+- ✅ `min_tier`
 
-Mas a Edge Function `upload-video-chunk` está tentando salvar os chunks com `contentType: 'application/octet-stream'`, que **não está na lista de tipos permitidos**.
+## Campos Faltando
 
-Erro exato:
-```
-StorageApiError: mime type application/octet-stream is not supported
-```
-
-## Solução Escolhida
-
-**Adicionar `application/octet-stream` à lista de tipos MIME permitidos no bucket.**
-
-Esta é a solução mais simples e correta porque:
-1. Os chunks são dados binários temporários, não vídeos completos
-2. A função `finalize-video-upload` já faz upload do arquivo final com o tipo correto (`video/mp4`, etc.)
-3. Os chunks são deletados após a concatenação
+Precisamos adicionar no auto-preenchimento:
+- ❌ `duration` - Duração (herdada da série)
+- ❌ `rating` - Avaliação
+- ❌ `trailer_url` - URL do trailer
+- ❌ `producer_type` - Tipo de produtor (individual, estúdio, etc.)
 
 ---
 
 ## Alteração Necessária
 
-### Migration SQL
+### Arquivo: `src/pages/producer/UploadMovie.tsx`
 
-```sql
-UPDATE storage.buckets 
-SET allowed_mime_types = ARRAY['video/mp4', 'video/webm', 'video/quicktime', 'application/octet-stream']
-WHERE id = 'videos';
+Modificar o `useEffect` de auto-preenchimento (linhas 100-118) para incluir **todos** os campos da série pai:
+
+```typescript
+// Auto-fill form when selecting an existing series
+useEffect(() => {
+  if (selectedSeriesData && seriesMode === 'existing') {
+    setFormData(prev => ({
+      ...prev,
+      // Identificação
+      series_id: selectedSeriesData.id,
+      title: selectedSeriesData.title,
+      
+      // Detalhes
+      synopsis: selectedSeriesData.synopsis || '',
+      year: selectedSeriesData.year || new Date().getFullYear(),
+      duration: selectedSeriesData.duration || 90,
+      rating: selectedSeriesData.rating || 0,
+      
+      // Classificação
+      age_rating: selectedSeriesData.age_rating || 'L',
+      language: selectedSeriesData.language || 'portugues',
+      
+      // Mídia
+      thumbnail_url: selectedSeriesData.thumbnail_url || '',
+      backdrop_url: selectedSeriesData.backdrop_url || '',
+      trailer_url: selectedSeriesData.trailer_url || '',
+      
+      // Gêneros
+      genre_ids: selectedSeriesData.genres.map(g => g.id),
+      
+      // Estrutura da série
+      total_seasons: selectedSeriesData.total_seasons || null,
+      total_episodes: selectedSeriesData.total_episodes || null,
+      
+      // Tier e produtor
+      min_tier: selectedSeriesData.min_tier || 'free',
+      producer_type: selectedSeriesData.producer_type || 'individual',
+    }));
+  }
+}, [selectedSeriesData, seriesMode]);
 ```
 
 ---
 
-## Fluxo de Upload (sem alterações)
+## Campos que Ficam para o Produtor Preencher
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│  1. upload-video-chunk                                          │
-│     ↓ Salva chunks com contentType: application/octet-stream    │
-│     ↓ Caminho: temp/{uploadId}/chunk_00001.bin                  │
-├─────────────────────────────────────────────────────────────────┤
-│  2. finalize-video-upload                                       │
-│     ↓ Concatena todos os chunks                                 │
-│     ↓ Salva arquivo final com contentType: video/mp4            │
-│     ↓ Caminho: movies/{uploadId}.mp4                            │
-│     ↓ Deleta chunks temporários                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+Quando série existente é selecionada, o produtor só precisa informar:
+
+| Campo | Descrição |
+|-------|-----------|
+| `season_number` | Qual temporada é este episódio |
+| `current_episode` | Qual é o número do episódio |
+| `video_url` | Upload do vídeo do episódio |
+
+Todos os outros campos são herdados automaticamente da série pai.
 
 ---
 
 ## Resultado Esperado
 
-1. Upload de chunks funcionará normalmente
-2. Arquivos temporários serão aceitos com `application/octet-stream`
-3. Arquivo final será salvo com o tipo MIME correto do vídeo
-4. O fluxo de upload de vídeos grandes (como o de 1.70 GB) será concluído com sucesso
+```text
+Produtor seleciona "Série Existente: Breaking Bad"
+           │
+           ▼
+┌──────────────────────────────────────────────────────────────┐
+│ ✓ PREENCHIDO AUTOMATICAMENTE:                                │
+│                                                              │
+│   Título: Breaking Bad                                       │
+│   Sinopse: Um professor de química...                        │
+│   Gêneros: Drama, Suspense, Crime                            │
+│   Classificação: 16 anos                                     │
+│   Idioma: Português                                          │
+│   Ano: 2008                                                  │
+│   Duração: 45 min (por episódio)                             │
+│   Thumbnail: [imagem da série]                               │
+│   Banner: [banner da série]                                  │
+│   Trailer: https://youtube.com/...                           │
+│   Tier: Premium                                              │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│ PRODUTOR PRECISA INFORMAR:                                   │
+│                                                              │
+│   Qual temporada? [ 3 ]                                      │
+│   Qual episódio?  [ 5 ]                                      │
+│   Vídeo: [UPLOAD AQUI]                                       │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
 
