@@ -20,7 +20,8 @@ import { VideoUploader } from '@/components/admin/VideoUploader';
 import { ImageUploader } from '@/components/admin/ImageUploader';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMovie, useCreateMovie, useUpdateMovie } from '@/hooks/useMovies';
-import { useSeriesListAdmin } from '@/hooks/useSeriesEpisodes';
+import { useSeriesListAdmin, useSeriesParent } from '@/hooks/useSeriesEpisodes';
+import { Badge } from '@/components/ui/badge';
 import { useGenresByContentType } from '@/hooks/useGenres';
 import { useToast } from '@/hooks/use-toast';
 import { Navigate, Link } from 'react-router-dom';
@@ -68,6 +69,14 @@ export default function MovieForm() {
   
   // Fetch available series for linking episodes
   const { data: seriesList, isLoading: seriesLoading } = useSeriesListAdmin();
+  
+  // Fetch selected series data for auto-fill
+  const { data: selectedSeriesData, isLoading: seriesParentLoading } = useSeriesParent(
+    formData.series_id || undefined
+  );
+  
+  // Check if an existing series is selected
+  const isExistingSeriesSelected = !!formData.series_id && !!selectedSeriesData;
 
   // Load movie data for editing
   useEffect(() => {
@@ -99,6 +108,46 @@ export default function MovieForm() {
       });
     }
   }, [movie, isEditing]);
+
+  // Auto-fill form when selecting an existing series
+  useEffect(() => {
+    if (selectedSeriesData && formData.series_id && !isEditing) {
+      console.log('Admin: Auto-filling form with series data:', selectedSeriesData);
+      setFormData(prev => ({
+        ...prev,
+        // Content type
+        content_type: selectedSeriesData.content_type || 'serie',
+        
+        // Inherited details
+        title: selectedSeriesData.title,
+        synopsis: selectedSeriesData.synopsis || '',
+        year: selectedSeriesData.year || new Date().getFullYear(),
+        duration: selectedSeriesData.duration || 90,
+        rating: selectedSeriesData.rating || 0,
+        
+        // Classification
+        age_rating: selectedSeriesData.age_rating || 'L',
+        language: selectedSeriesData.language || 'portugues',
+        
+        // Media
+        thumbnail_url: selectedSeriesData.thumbnail_url || '',
+        backdrop_url: selectedSeriesData.backdrop_url || '',
+        trailer_url: selectedSeriesData.trailer_url || '',
+        
+        // Genres
+        genre_ids: selectedSeriesData.genres?.map(g => g.id) || [],
+        
+        // Series structure
+        total_seasons: selectedSeriesData.total_seasons || null,
+        total_episodes: selectedSeriesData.total_episodes || null,
+        
+        // Tier and producer
+        min_tier: selectedSeriesData.min_tier || 'free',
+        producer_type: selectedSeriesData.producer_type || 'studio',
+        producer_name: selectedSeriesData.producer_name || '',
+      }));
+    }
+  }, [selectedSeriesData, formData.series_id, isEditing]);
 
   // Redirect non-admins
   if (!authLoading && !hasRole('admin')) {
@@ -151,7 +200,7 @@ export default function MovieForm() {
     }));
   };
 
-  const isLoading = authLoading || (isEditing && movieLoading) || genresLoading || seriesLoading;
+  const isLoading = authLoading || (isEditing && movieLoading) || genresLoading || seriesLoading || seriesParentLoading;
   const isSaving = createMovie.isPending || updateMovie.isPending;
 
   if (isLoading) {
@@ -332,9 +381,14 @@ export default function MovieForm() {
 
             {/* Basic Info */}
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold border-b border-border pb-2">
-                Informações Básicas
-              </h2>
+              <div className="flex items-center gap-2 border-b border-border pb-2">
+                <h2 className="text-lg font-semibold">
+                  Informações Básicas
+                </h2>
+                {isExistingSeriesSelected && (
+                  <Badge variant="secondary">Herdado da série</Badge>
+                )}
+              </div>
               
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2 md:col-span-2">
@@ -347,6 +401,8 @@ export default function MovieForm() {
                     onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                     placeholder={formData.content_type === 'serie' ? 'Nome da série' : formData.content_type === 'espetaculo' ? 'Nome do espetáculo' : 'Nome do filme'}
                     required
+                    disabled={isExistingSeriesSelected}
+                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
                   />
                 </div>
 
@@ -358,6 +414,8 @@ export default function MovieForm() {
                     onChange={(e) => setFormData(prev => ({ ...prev, synopsis: e.target.value }))}
                     placeholder="Descrição do filme..."
                     rows={4}
+                    disabled={isExistingSeriesSelected}
+                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
                   />
                 </div>
 
@@ -370,6 +428,8 @@ export default function MovieForm() {
                     max={2100}
                     value={formData.year}
                     onChange={(e) => setFormData(prev => ({ ...prev, year: parseInt(e.target.value) || 0 }))}
+                    disabled={isExistingSeriesSelected}
+                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
                   />
                 </div>
 
@@ -382,6 +442,8 @@ export default function MovieForm() {
                     max={600}
                     value={formData.duration}
                     onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
+                    disabled={isExistingSeriesSelected}
+                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
                   />
                 </div>
 
@@ -392,8 +454,9 @@ export default function MovieForm() {
                     onValueChange={(value: AgeRating) => 
                       setFormData(prev => ({ ...prev, age_rating: value }))
                     }
+                    disabled={isExistingSeriesSelected}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={isExistingSeriesSelected ? 'bg-muted' : ''}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -414,8 +477,9 @@ export default function MovieForm() {
                     onValueChange={(value: ContentLanguage) => 
                       setFormData(prev => ({ ...prev, language: value }))
                     }
+                    disabled={isExistingSeriesSelected}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={isExistingSeriesSelected ? 'bg-muted' : ''}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -437,6 +501,8 @@ export default function MovieForm() {
                     step={0.1}
                     value={formData.rating}
                     onChange={(e) => setFormData(prev => ({ ...prev, rating: parseFloat(e.target.value) || 0 }))}
+                    disabled={isExistingSeriesSelected}
+                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
                   />
                 </div>
 
@@ -447,6 +513,8 @@ export default function MovieForm() {
                     value={formData.producer_name}
                     onChange={(e) => setFormData(prev => ({ ...prev, producer_name: e.target.value }))}
                     placeholder="Nome do produtor ou estúdio"
+                    disabled={isExistingSeriesSelected}
+                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
                   />
                 </div>
               </div>
@@ -454,19 +522,25 @@ export default function MovieForm() {
 
             {/* Genres */}
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold border-b border-border pb-2">
-                Gêneros
-              </h2>
+              <div className="flex items-center gap-2 border-b border-border pb-2">
+                <h2 className="text-lg font-semibold">
+                  Gêneros
+                </h2>
+                {isExistingSeriesSelected && (
+                  <Badge variant="secondary">Herdado da série</Badge>
+                )}
+              </div>
               
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${isExistingSeriesSelected ? 'opacity-60' : ''}`}>
                 {genres?.map((genre) => (
                   <label
                     key={genre.id}
-                    className="flex items-center gap-2 cursor-pointer"
+                    className={`flex items-center gap-2 ${isExistingSeriesSelected ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     <Checkbox
                       checked={formData.genre_ids.includes(genre.id)}
                       onCheckedChange={() => handleGenreToggle(genre.id)}
+                      disabled={isExistingSeriesSelected}
                     />
                     <span className="text-sm">{genre.name}</span>
                   </label>
@@ -476,11 +550,16 @@ export default function MovieForm() {
 
             {/* Media */}
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold border-b border-border pb-2">
-                Mídia
-              </h2>
+              <div className="flex items-center gap-2 border-b border-border pb-2">
+                <h2 className="text-lg font-semibold">
+                  Mídia
+                </h2>
+                {isExistingSeriesSelected && (
+                  <Badge variant="secondary">Imagens herdadas</Badge>
+                )}
+              </div>
               
-              <div className="grid gap-6 md:grid-cols-2">
+              <div className={`grid gap-6 md:grid-cols-2 ${isExistingSeriesSelected ? 'opacity-60 pointer-events-none' : ''}`}>
                 <div className="space-y-2">
                   <Label>Thumbnail (2:3)</Label>
                   <ImageUploader
@@ -515,12 +594,17 @@ export default function MovieForm() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="trailer_url">URL do Trailer (YouTube Embed)</Label>
+                <Label htmlFor="trailer_url">
+                  URL do Trailer (YouTube Embed)
+                  {isExistingSeriesSelected && <Badge variant="secondary" className="ml-2">Herdado</Badge>}
+                </Label>
                 <Input
                   id="trailer_url"
                   value={formData.trailer_url}
                   onChange={(e) => setFormData(prev => ({ ...prev, trailer_url: e.target.value }))}
                   placeholder="https://www.youtube.com/embed/..."
+                  disabled={isExistingSeriesSelected}
+                  className={isExistingSeriesSelected ? 'bg-muted' : ''}
                 />
               </div>
             </div>
@@ -533,14 +617,18 @@ export default function MovieForm() {
               
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="min_tier">Tier Mínimo</Label>
+                  <Label htmlFor="min_tier">
+                    Tier Mínimo
+                    {isExistingSeriesSelected && <Badge variant="secondary" className="ml-2">Herdado</Badge>}
+                  </Label>
                   <Select
                     value={formData.min_tier}
                     onValueChange={(value: SubscriptionTier) => 
                       setFormData(prev => ({ ...prev, min_tier: value }))
                     }
+                    disabled={isExistingSeriesSelected}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={isExistingSeriesSelected ? 'bg-muted' : ''}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
