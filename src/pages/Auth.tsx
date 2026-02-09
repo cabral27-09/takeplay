@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Film, Clapperboard, User, Mail, Lock, Loader2, ArrowLeft, Chrome } from 'lucide-react';
+import { Film, Clapperboard, User, Mail, Lock, Loader2, ArrowLeft, Chrome, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
@@ -31,6 +31,7 @@ export default function Auth() {
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<AppRole>('viewer');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   
   const { signIn, signUp, user, isLoading } = useAuth();
@@ -348,12 +349,20 @@ export default function Auth() {
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="password"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10"
+                      className="pl-10 pr-10"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                   {errors.password && (
                     <p className="text-sm text-destructive">{errors.password}</p>
