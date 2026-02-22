@@ -20,7 +20,7 @@ const Browse = () => {
 
   return (
     <Layout>
-      <title>Explorar Filmes - IndieFlix</title>
+      <title>Explorar Filmes - Manivela Filmes</title>
       <meta name="description" content="Explore nossa coleção de filmes independentes. Dramas, documentários, comédias e muito mais." />
 
       <div className="pt-24 pb-16">
