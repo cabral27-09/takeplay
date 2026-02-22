@@ -43,7 +43,7 @@ const Index = () => {
   return (
     <Layout>
       {/* SEO Meta Tags */}
-      <title>IndieFlix - Cinema Independente</title>
+      <title>Manivela Filmes - Cinema Independente</title>
       <meta name="description" content="Descubra os melhores filmes independentes. Streaming sem anúncios, sem interrupções. Apenas cinema de qualidade." />
 
       {/* Hero Section */}

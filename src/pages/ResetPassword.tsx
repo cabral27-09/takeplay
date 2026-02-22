@@ -203,10 +203,10 @@ export default function ResetPassword() {
         {/* Logo */}
         <div className="flex items-center gap-2 mb-8 justify-center">
           <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-xl">T</span>
+            <span className="text-primary-foreground font-bold text-xl">M</span>
           </div>
           <span className="text-2xl font-bold">
-            Take<span className="text-primary">Play</span>
+            Manivela <span className="text-primary">Filmes</span>
           </span>
         </div>
 

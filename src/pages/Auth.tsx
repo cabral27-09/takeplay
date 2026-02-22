@@ -179,10 +179,10 @@ export default function Auth() {
           >
             <div className="flex items-center gap-3 mb-8">
               <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-2xl">T</span>
+                <span className="text-primary-foreground font-bold text-2xl">M</span>
               </div>
               <span className="text-3xl font-bold">
-                Take<span className="text-primary">Play</span>
+                Manivela <span className="text-primary">Filmes</span>
               </span>
             </div>
             <h1 className="text-4xl font-bold text-foreground mb-4">
@@ -208,10 +208,10 @@ export default function Auth() {
         >
           <div className="lg:hidden flex items-center gap-2 mb-8 justify-center">
             <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-xl">T</span>
+              <span className="text-primary-foreground font-bold text-xl">M</span>
             </div>
             <span className="text-2xl font-bold">
-              Take<span className="text-primary">Play</span>
+              Manivela <span className="text-primary">Filmes</span>
             </span>
           </div>
 

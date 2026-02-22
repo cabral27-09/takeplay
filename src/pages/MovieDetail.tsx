@@ -60,7 +60,7 @@ const MovieDetail = () => {
   return (
     <Layout>
       {/* SEO */}
-      <title>{movie.title} - IndieFlix</title>
+      <title>{movie.title} - Manivela Filmes</title>
       <meta name="description" content={movie.synopsis || ''} />
 
       {/* Hero Background */}

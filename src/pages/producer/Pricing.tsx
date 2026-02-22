@@ -122,7 +122,7 @@ export default function ProducerPricing() {
               Distribua seu conteúdo
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Escolha o plano ideal para enviar seus filmes e séries para o TakePlay
+              Escolha o plano ideal para enviar seus filmes e séries para o Manivela Filmes
             </p>
           </motion.div>
         </div>
@@ -245,7 +245,7 @@ export default function ProducerPricing() {
           </p>
           <p className="mt-2">
             Dúvidas? Entre em contato com nosso{' '}
-            <a href="mailto:suporte@takeplay.com" className="text-primary hover:underline">
+            <a href="mailto:suporte@manivelafilmes.com" className="text-primary hover:underline">
               suporte
             </a>
           </p>

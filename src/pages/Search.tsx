@@ -25,7 +25,7 @@ const Search = () => {
 
   return (
     <Layout>
-      <title>Buscar - IndieFlix</title>
+      <title>Buscar - Manivela Filmes</title>
       <meta name="description" content="Busque por filmes, gêneros ou produtores em nossa coleção de cinema independente." />
 
       <div className="pt-24 pb-16 min-h-screen">

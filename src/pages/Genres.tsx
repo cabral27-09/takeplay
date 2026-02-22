@@ -24,7 +24,7 @@ const Genres = () => {
 
   return (
     <Layout>
-      <title>Gêneros - IndieFlix</title>
+      <title>Gêneros - Manivela Filmes</title>
       <meta name="description" content="Explore filmes por gênero. Drama, documentário, comédia, romance, suspense e muito mais." />
 
       <div className="pt-24 pb-16">
