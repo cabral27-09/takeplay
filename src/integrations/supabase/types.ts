@@ -292,6 +292,59 @@ export type Database = {
         }
         Relationships: []
       }
+      video_views: {
+        Row: {
+          completed: boolean
+          counted: boolean
+          created_at: string
+          flagged: boolean
+          id: string
+          is_own_view: boolean
+          movie_id: string
+          producer_name: string | null
+          updated_at: string
+          user_id: string
+          view_date: string
+          watched_seconds: number
+        }
+        Insert: {
+          completed?: boolean
+          counted?: boolean
+          created_at?: string
+          flagged?: boolean
+          id?: string
+          is_own_view?: boolean
+          movie_id: string
+          producer_name?: string | null
+          updated_at?: string
+          user_id: string
+          view_date?: string
+          watched_seconds?: number
+        }
+        Update: {
+          completed?: boolean
+          counted?: boolean
+          created_at?: string
+          flagged?: boolean
+          id?: string
+          is_own_view?: boolean
+          movie_id?: string
+          producer_name?: string | null
+          updated_at?: string
+          user_id?: string
+          view_date?: string
+          watched_seconds?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_views_movie_id_fkey"
+            columns: ["movie_id"]
+            isOneToOne: false
+            referencedRelation: "movies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.finalize-video-upload]
 verify_jwt = false
+
+[functions.record-view]
+verify_jwt = false

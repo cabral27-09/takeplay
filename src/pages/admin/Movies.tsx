@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMovies, useDeleteMovie } from '@/hooks/useMovies';
+import { useMovieViewCounts } from '@/hooks/useMovieViewCounts';
 import { useToast } from '@/hooks/use-toast';
 import { Navigate } from 'react-router-dom';
 import type { ContentType } from '@/types/movie';
@@ -46,6 +47,7 @@ export default function AdminMovies() {
   
   const { hasRole, isLoading: authLoading } = useAuth();
   const { data: movies, isLoading: moviesLoading } = useMovies(true);
+  const { data: viewCounts } = useMovieViewCounts();
   const deleteMovie = useDeleteMovie();
   const { toast } = useToast();
 
@@ -201,8 +203,9 @@ export default function AdminMovies() {
                   <TableHead>Ano</TableHead>
                   <TableHead>Gêneros</TableHead>
                   <TableHead>Tier</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Views</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -288,6 +291,14 @@ export default function AdminMovies() {
                            movie.status === 'rejected' ? 'Recusado' : 'Rascunho'}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{viewCounts?.[movie.id]?.total_views || 0}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {viewCounts?.[movie.id]?.valid_views || 0} válidas
+                          </span>
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Link to={`/admin/movies/${movie.id}/edit`}>
@@ -327,7 +338,7 @@ export default function AdminMovies() {
                 })}
                 {(!filteredMovies || filteredMovies.length === 0) && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12">
+                    <TableCell colSpan={9} className="text-center py-12">
                       <Film className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
                       <p className="text-muted-foreground">
                         {activeTab === 'all' 

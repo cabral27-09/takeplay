@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Film, Clock, CheckCircle, XCircle, Edit, Trash2, Eye } from 'lucide-react';
+import { Plus, Film, Clock, CheckCircle, XCircle, Edit, Trash2, Eye, BarChart3 } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMovies, useDeleteMovie } from '@/hooks/useMovies';
+import { useMovieViewCounts } from '@/hooks/useMovieViewCounts';
 import { useToast } from '@/hooks/use-toast';
 import type { MovieStatus, MovieWithGenres } from '@/types/movie';
 
@@ -39,6 +40,7 @@ const STATUS_CONFIG: Record<MovieStatus, { label: string; icon: React.ComponentT
 export default function ProducerMovies() {
   const { user, profile, hasRole, isLoading: authLoading } = useAuth();
   const { data: allMovies, isLoading: moviesLoading } = useMovies(true);
+  const { data: viewCounts } = useMovieViewCounts();
   const deleteMovie = useDeleteMovie();
   const { toast } = useToast();
   
@@ -87,6 +89,9 @@ export default function ProducerMovies() {
   const isLoading = authLoading || moviesLoading;
 
   // Stats
+  const totalViews = producerMovies.reduce((sum, m) => sum + (viewCounts?.[m.id]?.total_views || 0), 0);
+  const validViews = producerMovies.reduce((sum, m) => sum + (viewCounts?.[m.id]?.valid_views || 0), 0);
+
   const stats = {
     total: producerMovies.length,
     draft: producerMovies.filter(m => m.status === 'draft').length,
@@ -130,7 +135,7 @@ export default function ProducerMovies() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -174,6 +179,18 @@ export default function ProducerMovies() {
                 <div className="text-2xl font-bold">{stats.rejected}</div>
               </CardContent>
             </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  Views Válidas
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{validViews}</div>
+                <p className="text-xs text-muted-foreground">{totalViews} total</p>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Movies Table */}
@@ -202,6 +219,7 @@ export default function ProducerMovies() {
                       <TableHead>Filme</TableHead>
                       <TableHead>Gêneros</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Views</TableHead>
                       <TableHead>Enviado em</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
@@ -253,6 +271,14 @@ export default function ProducerMovies() {
                               <StatusIcon className="h-3 w-3" />
                               {statusConfig.label}
                             </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{viewCounts?.[movie.id]?.valid_views || 0}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {viewCounts?.[movie.id]?.total_views || 0} total
+                              </span>
+                            </div>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {new Date(movie.created_at).toLocaleDateString('pt-BR')}

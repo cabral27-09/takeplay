@@ -23,6 +23,7 @@ import { ShareButton } from '@/components/share/ShareButton';
 import { useVideoUrl } from '@/hooks/useVideoUrl';
 import { useAirPlay } from '@/hooks/useAirPlay';
 import { useChromecast } from '@/hooks/useChromecast';
+import { useVideoViews } from '@/hooks/useVideoViews';
 import { CastButton } from './CastButton';
 
 interface VideoPlayerProps {
@@ -64,6 +65,11 @@ export function VideoPlayer({
   // Casting hooks
   const airplay = useAirPlay(videoRef);
   const chromecast = useChromecast(videoRef);
+  
+  // View tracking
+  const { startView, updateSeconds, stopView } = useVideoViews(movieId);
+  const viewStartedRef = useRef(false);
+  const viewAccumulatedRef = useRef(0);
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -127,12 +133,16 @@ export function VideoPlayer({
         }
       }
 
-      // Track watched seconds for preview mode (only while playing)
-      if (!v.paused && !v.ended && previewMode && !previewEnded) {
+      // Track watched seconds (both preview and view tracking)
+      if (!v.paused && !v.ended) {
         watchedSecondsRef.current += deltaMs / 1000;
         
-        // Check preview limit based on watched time
-        if (watchedSecondsRef.current >= previewDuration) {
+        // Update view tracking accumulated seconds
+        viewAccumulatedRef.current = watchedSecondsRef.current;
+        updateSeconds(viewAccumulatedRef.current);
+        
+        // Check preview limit
+        if (previewMode && !previewEnded && watchedSecondsRef.current >= previewDuration) {
           console.log('[VideoPlayer] Preview limit reached via watchedSeconds');
           v.pause();
           setIsPlaying(false);
@@ -290,6 +300,11 @@ export function VideoPlayer({
     const handlePlay = () => {
       setIsPlaying(true);
       startTimeLoop();
+      // Start view tracking on first play
+      if (!viewStartedRef.current) {
+        viewStartedRef.current = true;
+        startView();
+      }
     };
 
     const handlePause = () => {
@@ -330,8 +345,17 @@ export function VideoPlayer({
   // Reset watched seconds when video URL changes
   useEffect(() => {
     watchedSecondsRef.current = 0;
+    viewAccumulatedRef.current = 0;
+    viewStartedRef.current = false;
     setPreviewEnded(false);
   }, [videoUrl]);
+
+  // Stop view tracking on unmount
+  useEffect(() => {
+    return () => {
+      stopView();
+    };
+  }, [stopView]);
 
   const handleSubscribe = () => {
     // Redirecionar para página de planos onde usuário pode escolher
