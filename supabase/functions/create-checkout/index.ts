@@ -16,6 +16,11 @@ const PLAN_IDS: Record<string, string> = {
   premium: '05fed28083034eada6865427fc70fe96',
 };
 
+// Backward compatibility: old frontend payloads (Stripe priceId)
+const LEGACY_PRICE_TO_PLAN: Record<string, string> = {
+  price_1StDcWCeLx1o0X2JEP36pI2f: PLAN_IDS.premium,
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -35,7 +40,18 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     logStep("Request body", body);
-    const { planId } = body;
+
+    const legacyMappedPlanId =
+      typeof body?.priceId === "string" ? LEGACY_PRICE_TO_PLAN[body.priceId] : undefined;
+
+    if (body?.priceId && legacyMappedPlanId) {
+      logStep("Mapped legacy priceId to planId", {
+        priceId: body.priceId,
+        planId: legacyMappedPlanId,
+      });
+    }
+
+    const planId = body?.planId ?? legacyMappedPlanId;
     if (!planId) throw new Error("planId is required");
     logStep("Plan ID received", { planId });
 
