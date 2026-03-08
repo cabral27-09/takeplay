@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.record-view]
 verify_jwt = false
+
+[functions.create-mp-plans]
+verify_jwt = false
