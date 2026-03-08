@@ -11,12 +11,6 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CHECK-SUBSCRIPTION] ${step}${detailsStr}`);
 };
 
-// Map Mercado Pago plan IDs to tiers
-const PLAN_TIER_MAP: Record<string, string> = {
-  'bb8d14e00c0a4dbba6cad6128b6b485e': 'standard',
-  '05fed28083034eada6865427fc70fe96': 'premium',
-};
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -42,92 +36,45 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     logStep("User authenticated", { userId: user.id, email: user.email });
 
-    // FIRST: Check for admin-granted subscription (takes priority)
-    const { data: adminSub, error: adminSubError } = await supabaseClient
+    // Check admin_subscriptions table (populated by admin grants AND mp-webhook)
+    const { data: sub, error: subError } = await supabaseClient
       .from('admin_subscriptions')
       .select('*')
       .eq('user_id', user.id)
       .eq('is_active', true)
       .single();
 
-    if (adminSub && !adminSubError) {
-      const isExpired = adminSub.expires_at && new Date(adminSub.expires_at) < new Date();
+    if (sub && !subError) {
+      const isExpired = sub.expires_at && new Date(sub.expires_at) < new Date();
       
       if (!isExpired) {
-        logStep("Found active admin-granted subscription", { 
-          tier: adminSub.tier, 
-          expires_at: adminSub.expires_at 
+        logStep("Found active subscription", { 
+          tier: sub.tier, 
+          expires_at: sub.expires_at,
+          reason: sub.reason,
         });
         
         return new Response(JSON.stringify({
-          subscribed: adminSub.tier !== 'free',
-          tier: adminSub.tier,
-          subscription_end: adminSub.expires_at,
-          admin_granted: true,
+          subscribed: sub.tier !== 'free',
+          tier: sub.tier,
+          subscription_end: sub.expires_at,
+          admin_granted: !sub.reason?.startsWith('mp_payment_'),
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 200,
         });
       } else {
-        logStep("Admin subscription expired, checking Mercado Pago");
+        logStep("Subscription expired", { expires_at: sub.expires_at });
       }
     }
 
-    // SECOND: Check Mercado Pago subscription
-    const mpToken = Deno.env.get("MP_ACCESS_TOKEN");
-    if (!mpToken) {
-      logStep("MP_ACCESS_TOKEN not set, returning free tier");
-      return new Response(JSON.stringify({ subscribed: false, tier: 'free' }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
-    }
-
-    // Search for active preapprovals (subscriptions) by payer email
-    const searchUrl = `https://api.mercadopago.com/preapproval/search?payer_email=${encodeURIComponent(user.email)}&status=authorized&sort=date_created&criteria=desc&limit=10`;
-    
-    const searchRes = await fetch(searchUrl, {
-      headers: {
-        "Authorization": `Bearer ${mpToken}`,
-      },
-    });
-
-    const searchData = await searchRes.json();
-    logStep("MP preapproval search", { status: searchRes.status, total: searchData.paging?.total });
-
-    if (!searchRes.ok || !searchData.results || searchData.results.length === 0) {
-      logStep("No active MP subscription found");
-      return new Response(JSON.stringify({ subscribed: false, tier: 'free' }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
-    }
-
-    // Find the highest tier active subscription
-    let bestTier = 'free';
-    let subscriptionEnd: string | null = null;
-
-    for (const sub of searchData.results) {
-      const planId = sub.preapproval_plan_id;
-      const tier = PLAN_TIER_MAP[planId];
-      
-      if (tier) {
-        const tierLevel = tier === 'premium' ? 2 : tier === 'standard' ? 1 : 0;
-        const bestLevel = bestTier === 'premium' ? 2 : bestTier === 'standard' ? 1 : 0;
-        
-        if (tierLevel > bestLevel) {
-          bestTier = tier;
-          subscriptionEnd = sub.next_payment_date || null;
-        }
-      }
-    }
-
-    logStep("Best tier found", { tier: bestTier, subscriptionEnd });
-
+    // No active subscription found
+    logStep("No active subscription found, returning free");
     return new Response(JSON.stringify({
-      subscribed: bestTier !== 'free',
-      tier: bestTier,
-      subscription_end: subscriptionEnd,
+      subscribed: false,
+      tier: 'free',
+      subscription_end: null,
+      admin_granted: false,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
