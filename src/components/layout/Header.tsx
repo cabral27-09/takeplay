@@ -105,9 +105,7 @@ export const Header = () => {
             animate={{ opacity: 1, x: 0 }}
             className="flex items-center gap-2"
           >
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">M</span>
-            </div>
+            <img src={logoManivela} alt="Manivela Filmes" className="h-10 w-10 rounded-full object-cover" />
             <span className="text-xl font-semibold tracking-tight text-foreground">
               Manivela <span className="text-primary">Filmes</span>
             </span>
