@@ -1,140 +1,82 @@
 
-# Plano: Sistema de Views com Anti-Fraude
+
+# Migração de Stripe para Mercado Pago (Checkout Pro)
 
 ## Resumo
 
-Criar a tabela `video_views`, uma Edge Function `record-view` para registro seguro, um hook `useVideoViews` no player, e exibir contagem de views nas paginas Admin e Producer com permissoes diferentes:
+Substituir toda a integração Stripe por Mercado Pago usando **Checkout Pro** (redirect) para ambos os fluxos: assinaturas de viewers e pagamentos avulsos de produtores.
 
-- **Admin**: ve views de todos os conteudos
-- **Producer**: ve views somente dos seus conteudos
+O Mercado Pago Checkout Pro não suporta assinaturas recorrentes nativas no modo redirect — ele funciona como pagamento único. Para recorrência (Standard/Premium), usaremos a **API de Preapproval (assinaturas)** do Mercado Pago, que também faz redirect para o usuário autorizar o pagamento recorrente.
 
 ---
 
-## 1. Migracao SQL - Tabela `video_views`
+## Arquivos impactados
 
-```sql
-CREATE TABLE public.video_views (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  movie_id uuid NOT NULL REFERENCES public.movies(id) ON DELETE CASCADE,
-  user_id uuid NOT NULL,
-  producer_name text,
-  watched_seconds integer NOT NULL DEFAULT 0,
-  completed boolean NOT NULL DEFAULT false,
-  counted boolean NOT NULL DEFAULT false,
-  is_own_view boolean NOT NULL DEFAULT false,
-  flagged boolean NOT NULL DEFAULT false,
-  view_date date NOT NULL DEFAULT CURRENT_DATE,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE(user_id, movie_id, view_date)
-);
+### Edge Functions a REESCREVER:
+1. **`supabase/functions/create-checkout/index.ts`** → Criar preferência de assinatura (Preapproval) no Mercado Pago para viewers
+2. **`supabase/functions/create-producer-checkout/index.ts`** → Criar preferência de pagamento único no Mercado Pago para produtores
+3. **`supabase/functions/check-subscription/index.ts`** → Verificar assinatura via API do Mercado Pago (em vez de Stripe)
+4. **`supabase/functions/check-producer-purchase/index.ts`** → Verificar pagamento via API do Mercado Pago (em vez de Stripe)
+5. **`supabase/functions/customer-portal/index.ts`** → Remover (Mercado Pago não tem portal equivalente ao Stripe)
 
-ALTER TABLE public.video_views ENABLE ROW LEVEL SECURITY;
+### Frontend a ATUALIZAR:
+6. **`src/lib/subscription-tiers.ts`** → Trocar `priceId`/`productId` do Stripe por IDs do Mercado Pago (plan IDs para assinaturas, preference IDs para avulsos)
+7. **`src/pages/Pricing.tsx`** → Remover referência ao customer-portal, ajustar fluxo de sucesso
+8. **`src/pages/producer/Pricing.tsx`** → Atualizar texto "Stripe" → "Mercado Pago"
+9. **`src/components/subscription/SubscriptionGate.tsx`** → Sem mudanças estruturais (já chama `create-checkout`)
+10. **`src/components/subscription/PaymentSuccessModal.tsx`** → Remover botão "Ver Fatura" (portal Stripe)
+11. **`src/contexts/AuthContext.tsx`** → Sem mudanças (já chama `check-subscription`)
 
--- Indices
-CREATE INDEX idx_video_views_movie ON public.video_views(movie_id);
-CREATE INDEX idx_video_views_producer_date ON public.video_views(producer_name, created_at);
-CREATE INDEX idx_video_views_user_date ON public.video_views(user_id, view_date);
+### Config:
+12. **`supabase/config.toml`** → Adicionar novas functions se necessário
 
--- RLS: Admins podem ler tudo
-CREATE POLICY "Admins can read all views"
-  ON public.video_views FOR SELECT
-  USING (public.has_role(auth.uid(), 'admin'));
+---
 
--- RLS: Usuarios podem ler suas proprias views
-CREATE POLICY "Users can read own views"
-  ON public.video_views FOR SELECT
-  USING (auth.uid() = user_id);
+## Passo a passo
 
--- RLS: Produtores podem ler views dos seus conteudos
-CREATE POLICY "Producers can read views of own content"
-  ON public.video_views FOR SELECT
-  USING (
-    public.has_role(auth.uid(), 'producer') AND
-    producer_name = (SELECT full_name FROM public.profiles WHERE id = auth.uid())
-  );
+### 1. Configurar secret do Mercado Pago
+- Usar `add_secret` para solicitar o **Access Token** de produção do Mercado Pago (`MP_ACCESS_TOKEN`)
+- A Public Key não é necessária no backend (só seria usada para Checkout Bricks no frontend)
 
--- RLS: Somente service_role pode inserir/atualizar (via Edge Function)
--- Nenhuma policy de INSERT/UPDATE para authenticated = bloqueado
+### 2. Criar produtos/planos no Mercado Pago
+- Antes de codificar, você precisará criar os planos de assinatura no painel do Mercado Pago (ou via API) para Standard e Premium
+- Para produtores (pagamento único), usaremos a API de Preferências do Mercado Pago
 
--- Trigger updated_at
-CREATE TRIGGER set_video_views_updated_at
-  BEFORE UPDATE ON public.video_views
-  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-```
+### 3. Reescrever `create-checkout` (Assinaturas de Viewers)
+- Usar a API de Preapproval do Mercado Pago (`POST /preapproval`) para criar assinaturas recorrentes
+- Mapear Standard → plan_id do MP, Premium → plan_id do MP
+- Retornar `init_point` (URL de redirect) ao frontend
 
-## 2. Edge Function `record-view`
+### 4. Reescrever `create-producer-checkout` (Pagamentos Avulsos)
+- Usar a API de Preferências (`POST /checkout/preferences`) para pagamento único
+- Configurar `items` com preço e título do plano de produtor
+- Retornar `init_point` ao frontend
 
-**Arquivo**: `supabase/functions/record-view/index.ts`
+### 5. Reescrever `check-subscription` (Verificar Assinatura)
+- Manter prioridade de `admin_subscriptions` (sem mudança)
+- Substituir consulta ao Stripe por consulta à API do Mercado Pago: buscar assinaturas ativas do usuário via `GET /preapproval/search?payer_email={email}&status=authorized`
+- Retornar tier baseado no plan_id encontrado
 
-**Config** em `supabase/config.toml`:
-```toml
-[functions.record-view]
-verify_jwt = false
-```
+### 6. Reescrever `check-producer-purchase`
+- Manter consulta local ao `producer_purchases` (sem mudança)
+- Substituir fallback Stripe por consulta ao Mercado Pago: buscar pagamentos aprovados via `GET /v1/payments/search?payer.email={email}&status=approved`
+- Sincronizar com `producer_purchases` como já faz hoje
 
-**Logica**:
-- Recebe `{ movieId, watchedSeconds }` via POST
-- Valida autenticacao (Bearer token)
-- Busca dados do filme (`producer_name`) e do usuario (`full_name`)
-- Detecta `is_own_view` comparando `producer_name == full_name`
-- Usa UPSERT com constraint `(user_id, movie_id, view_date)`:
-  - Se ja existe registro hoje, atualiza `watched_seconds` e `updated_at`
-  - Se nao existe, insere novo
-- Rate limit: conta views do usuario hoje; se > 20, rejeita
-- Marca `counted = true` se `watched_seconds >= 60` e `is_own_view = false`
-- Marca `completed = true` se assistiu > 90% da duracao do filme
+### 7. Remover `customer-portal`
+- Deletar a edge function (Mercado Pago não tem equivalente)
+- Remover referências no `PaymentSuccessModal.tsx` e `Pricing.tsx`
 
-## 3. Hook `src/hooks/useVideoViews.ts`
+### 8. Atualizar frontend
+- Trocar IDs de preço/produto do Stripe por IDs do Mercado Pago em `subscription-tiers.ts`
+- Remover botão "Gerenciar Assinatura" (customer portal) do `Pricing.tsx`
+- Remover botão "Ver Fatura" do `PaymentSuccessModal.tsx`
+- Atualizar textos de "Stripe" para "Mercado Pago" no `producer/Pricing.tsx`
 
-- `startView(movieId)`: chama Edge Function com `watchedSeconds = 0`
-- `updateView(movieId, seconds)`: chama Edge Function com segundos acumulados
-- Usa `useRef` para acumular tempo e enviar a cada 30 segundos
-- No `useEffect cleanup`, envia o tempo final via `navigator.sendBeacon` ou `fetch` com `keepalive: true`
+---
 
-## 4. Integracao no `VideoPlayer.tsx`
+## Pré-requisitos antes de implementar
 
-- Importar e usar `useVideoViews`
-- Ao iniciar reproducao: `startView(movieId)`
-- No loop RAF existente: acumular `watchedSeconds` e enviar a cada 30s
-- No cleanup do componente: enviar tempo final
+Precisarei de você:
+1. **Access Token de produção** do Mercado Pago
+2. **Plan IDs** para os planos Standard e Premium (se já criou no painel do MP), ou se quer que eu crie via API durante a implementação
 
-## 5. Exibir Views na Tabela Admin (`src/pages/admin/Movies.tsx`)
-
-- Criar hook `useMovieViewCounts()` que faz query agrupada:
-  ```sql
-  SELECT movie_id, COUNT(*) as total_views, 
-         COUNT(*) FILTER (WHERE counted) as valid_views
-  FROM video_views GROUP BY movie_id
-  ```
-- Adicionar coluna "Views" na tabela com badge mostrando o total
-- Admin ve views de todos os filmes (RLS ja permite)
-
-## 6. Exibir Views na Tabela Producer (`src/pages/producer/Movies.tsx`)
-
-- Reutilizar `useMovieViewCounts()` - RLS garante que produtor so ve views dos seus conteudos
-- Adicionar coluna "Views" na tabela do produtor
-- Adicionar card de estatisticas com total de views
-
-## Arquivos Criados/Alterados
-
-| Arquivo | Acao |
-|---------|------|
-| Migracao SQL | Criar tabela `video_views` |
-| `supabase/config.toml` | Adicionar config `record-view` |
-| `supabase/functions/record-view/index.ts` | Criar Edge Function |
-| `src/hooks/useVideoViews.ts` | Criar hook de tracking |
-| `src/hooks/useMovieViewCounts.ts` | Criar hook de contagem |
-| `src/components/video/VideoPlayer.tsx` | Integrar tracking |
-| `src/pages/admin/Movies.tsx` | Adicionar coluna Views |
-| `src/pages/producer/Movies.tsx` | Adicionar coluna Views + card |
-
-## Seguranca
-
-- Clientes nao podem inserir direto na tabela (sem policy INSERT para authenticated)
-- Toda insercao passa pela Edge Function com service_role
-- Produtor ve somente views dos seus conteudos (RLS por `producer_name`)
-- Admin ve tudo
-- Views do proprio produtor sao marcadas e nao contam para royalties
-- Rate limit de 20 views validas por dia por usuario
-- Deduplicacao: 1 view por usuario por filme por dia
