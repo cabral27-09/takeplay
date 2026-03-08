@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Search, Menu, X, LogIn, LogOut, User, Crown, Sparkles, Film, CheckCircle, ChevronDown } from "lucide-react";
+import logoManivela from "@/assets/logo-manivela.png";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
