@@ -85,15 +85,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           adminGranted: true,
         };
       } else {
-        // Otherwise, use Stripe-based subscription
-        const productId = data?.product_id ?? null;
-        const tier = getTierByProductId(productId);
+        // Use Mercado Pago-based subscription (tier returned directly)
+        const tier = (data?.tier as SubscriptionTier) || 'free';
 
         newSubscription = {
           subscribed: data?.subscribed ?? false,
           subscriptionEnd: data?.subscription_end ?? null,
           tier,
-          productId,
+          productId: null,
           adminGranted: false,
         };
       }
