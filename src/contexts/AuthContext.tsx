@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { SubscriptionTier, getTierByProductId } from '@/lib/subscription-tiers';
+import { SubscriptionTier } from '@/lib/subscription-tiers';
 
 type AppRole = 'viewer' | 'producer' | 'admin';
 
