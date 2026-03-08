@@ -10,15 +10,22 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-CHECKOUT] ${step}`, details ? JSON.stringify(details) : '');
 };
 
-// Mercado Pago Plan IDs
-const PLAN_IDS: Record<string, string> = {
-  standard: 'bb8d14e00c0a4dbba6cad6128b6b485e',
-  premium: '05fed28083034eada6865427fc70fe96',
+// Plan configs: viewer subscriptions as one-time payments via Checkout Pro (supports PIX)
+const PLAN_CONFIGS: Record<string, { title: string; price: number; tier: string }> = {
+  standard: { title: 'TakePlay Standard - Mensal', price: 14.90, tier: 'standard' },
+  premium: { title: 'TakePlay Premium - Mensal', price: 19.90, tier: 'premium' },
 };
 
-// Backward compatibility: old frontend payloads (Stripe priceId)
-const LEGACY_PRICE_TO_PLAN: Record<string, string> = {
-  price_1StDcWCeLx1o0X2JEP36pI2f: PLAN_IDS.premium,
+// Map old Mercado Pago plan IDs to new plan keys
+const PLAN_ID_TO_KEY: Record<string, string> = {
+  'bb8d14e00c0a4dbba6cad6128b6b485e': 'standard',
+  '05fed28083034eada6865427fc70fe96': 'premium',
+};
+
+// Map old Stripe priceIds to plan keys
+const LEGACY_PRICE_TO_KEY: Record<string, string> = {
+  'price_1StDcWCeLx1o0X2JEP36pI2f': 'standard',
+  'price_1StDe5CeLx1o0X2JtcO3fVz2': 'premium',
 };
 
 serve(async (req) => {
@@ -32,71 +39,90 @@ serve(async (req) => {
   );
 
   try {
+    logStep("Function started");
+
     const authHeader = req.headers.get("Authorization")!;
     const token = authHeader.replace("Bearer ", "");
     const { data } = await supabaseClient.auth.getUser(token);
     const user = data.user;
     if (!user?.email) throw new Error("User not authenticated or email not available");
+    logStep("User authenticated", { userId: user.id, email: user.email });
 
     const body = await req.json().catch(() => ({}));
     logStep("Request body", body);
 
-    const legacyMappedPlanId =
-      typeof body?.priceId === "string" ? LEGACY_PRICE_TO_PLAN[body.priceId] : undefined;
+    // Resolve plan key from various input formats
+    let planKey: string | undefined;
 
-    if (body?.priceId && legacyMappedPlanId) {
-      logStep("Mapped legacy priceId to planId", {
-        priceId: body.priceId,
-        planId: legacyMappedPlanId,
-      });
+    if (body?.planId) {
+      // Could be a plan key directly (e.g. "standard") or an old MP plan ID
+      planKey = PLAN_CONFIGS[body.planId] ? body.planId : PLAN_ID_TO_KEY[body.planId];
+    }
+    if (!planKey && body?.priceId) {
+      planKey = LEGACY_PRICE_TO_KEY[body.priceId];
     }
 
-    const planId = body?.planId ?? legacyMappedPlanId;
-    if (!planId) throw new Error("planId is required");
-    logStep("Plan ID received", { planId });
-
-    // Validate plan ID
-    const validPlanIds = Object.values(PLAN_IDS);
-    if (!validPlanIds.includes(planId)) {
-      throw new Error("Invalid planId");
+    if (!planKey || !PLAN_CONFIGS[planKey]) {
+      throw new Error("Invalid plan identifier");
     }
+
+    const plan = PLAN_CONFIGS[planKey];
+    logStep("Plan resolved", { planKey, plan });
 
     const mpToken = Deno.env.get("MP_ACCESS_TOKEN");
     if (!mpToken) throw new Error("MP_ACCESS_TOKEN not set");
 
-    // Robust origin fallback
-    const origin = req.headers.get("origin") 
-      || req.headers.get("referer")?.split("/").slice(0, 3).join("/") 
+    const origin = req.headers.get("origin")
+      || req.headers.get("referer")?.split("/").slice(0, 3).join("/")
       || "https://takeplay.lovable.app";
     logStep("Origin determined", { origin });
 
-    // Fetch the subscription plan and use its hosted checkout URL (init_point)
-    // This avoids requiring card_token_id in our backend.
-    const planRes = await fetch(`https://api.mercadopago.com/preapproval_plan/${planId}`, {
-      method: "GET",
+    // Use Checkout Pro (preferences API) — supports PIX, credit card, boleto
+    const preferenceRes = await fetch("https://api.mercadopago.com/checkout/preferences", {
+      method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${mpToken}`,
       },
+      body: JSON.stringify({
+        items: [
+          {
+            title: plan.title,
+            quantity: 1,
+            unit_price: plan.price,
+            currency_id: "BRL",
+          },
+        ],
+        payer: {
+          email: user.email,
+        },
+        payment_methods: {
+          excluded_payment_types: [],
+          installments: 1,
+        },
+        back_urls: {
+          success: `${origin}/pricing?success=true`,
+          failure: `${origin}/pricing`,
+          pending: `${origin}/pricing?pending=true`,
+        },
+        auto_return: "approved",
+        external_reference: `${user.id}|${plan.tier}`,
+        metadata: {
+          user_id: user.id,
+          tier: plan.tier,
+        },
+      }),
     });
 
-    const planData = await planRes.json();
-    logStep("Plan fetch response", { status: planRes.status, id: planData?.id });
+    const preferenceData = await preferenceRes.json();
+    logStep("Preference response", { status: preferenceRes.status, id: preferenceData.id });
 
-    if (!planRes.ok) {
-      throw new Error(`Mercado Pago plan error: ${JSON.stringify(planData)}`);
+    if (!preferenceRes.ok) {
+      throw new Error(`Mercado Pago error: ${JSON.stringify(preferenceData)}`);
     }
 
-    const planInitPoint = planData?.init_point;
-    const fallbackInitPoint = `https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=${encodeURIComponent(planId)}`;
-
-    const checkoutUrl = new URL(planInitPoint || fallbackInitPoint);
-    checkoutUrl.searchParams.set("preapproval_plan_id", planId);
-    checkoutUrl.searchParams.set("external_reference", user.id);
-    checkoutUrl.searchParams.set("payer_email", user.email);
-    checkoutUrl.searchParams.set("back_url", `${origin}/pricing?success=true`);
-
-    const url = checkoutUrl.toString();
+    const url = preferenceData.init_point;
+    if (!url) throw new Error("No init_point returned from Mercado Pago");
 
     logStep("Checkout URL generated", { url });
 
