@@ -4,8 +4,7 @@ export type ProducerTier = 'produtor_anual' | 'produtor_semestral' | 'produtor_a
 export interface TierInfo {
   name: string;
   price: number;
-  priceId?: string;
-  productId?: string;
+  planId?: string; // Mercado Pago plan ID for subscriptions
   description: string;
   features: string[];
   highlighted?: boolean;
@@ -14,8 +13,7 @@ export interface TierInfo {
 export interface ProducerTierInfo {
   name: string;
   price: number;
-  priceId: string;
-  productId: string;
+  tier: ProducerTier; // Used as key for checkout
   description: string;
   features: string[];
   uploadsAllowed: number;
@@ -39,8 +37,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierInfo> = {
   standard: {
     name: 'Standard',
     price: 14.90,
-    priceId: 'price_1StDcWCeLx1o0X2JEP36pI2f',
-    productId: 'prod_TqvTi7txLYbgVK',
+    planId: 'bb8d14e00c0a4dbba6cad6128b6b485e',
     description: 'Para quem quer mais',
     features: [
       'Tudo do plano Grátis',
@@ -52,8 +49,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierInfo> = {
   premium: {
     name: 'Premium',
     price: 19.90,
-    priceId: 'price_1StDe5CeLx1o0X2JtcO3fVz2',
-    productId: 'prod_TqvVvRzOWJLsmS',
+    planId: '05fed28083034eada6865427fc70fe96',
     description: 'A experiência completa',
     features: [
       'Tudo do plano Standard',
@@ -70,8 +66,7 @@ export const PRODUCER_TIERS: Record<ProducerTier, ProducerTierInfo> = {
   produtor_anual: {
     name: 'Produtor Anual',
     price: 299.90,
-    priceId: 'price_1StDgyCeLx1o0X2J05Ip3ZI0',
-    productId: 'prod_TqvYsBxxU64nn2',
+    tier: 'produtor_anual',
     description: 'Para produtores frequentes',
     features: [
       '10 uploads por ano',
@@ -88,8 +83,7 @@ export const PRODUCER_TIERS: Record<ProducerTier, ProducerTierInfo> = {
   produtor_semestral: {
     name: 'Produtor Semestral',
     price: 179.90,
-    priceId: 'price_1StDjLCeLx1o0X2JiTaGtE8R',
-    productId: 'prod_TqvaIP6ov8bnnn',
+    tier: 'produtor_semestral',
     description: 'Ideal para projetos pontuais',
     features: [
       '5 uploads por semestre',
@@ -104,8 +98,7 @@ export const PRODUCER_TIERS: Record<ProducerTier, ProducerTierInfo> = {
   produtor_avulso: {
     name: 'Upload Avulso',
     price: 49.90,
-    priceId: 'price_1StDkPCeLx1o0X2JR93OuCwW',
-    productId: 'prod_Tqvbvoa1mdrqeQ',
+    tier: 'produtor_avulso',
     description: 'Para um único upload',
     features: [
       '1 upload',
@@ -119,28 +112,16 @@ export const PRODUCER_TIERS: Record<ProducerTier, ProducerTierInfo> = {
   },
 };
 
-export function getTierByProductId(productId: string | null): SubscriptionTier {
-  if (!productId) return 'free';
+export function getTierByPlanId(planId: string | null): SubscriptionTier {
+  if (!planId) return 'free';
   
   for (const [tier, info] of Object.entries(SUBSCRIPTION_TIERS)) {
-    if (info.productId === productId) {
+    if (info.planId === planId) {
       return tier as SubscriptionTier;
     }
   }
   
   return 'free';
-}
-
-export function getProducerTierByProductId(productId: string | null): ProducerTier | null {
-  if (!productId) return null;
-  
-  for (const [tier, info] of Object.entries(PRODUCER_TIERS)) {
-    if (info.productId === productId) {
-      return tier as ProducerTier;
-    }
-  }
-  
-  return null;
 }
 
 export function getProducerTierInfo(tier: ProducerTier): ProducerTierInfo {

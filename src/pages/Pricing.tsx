@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { PaymentSuccessModal } from '@/components/subscription/PaymentSuccessModal';
 
 const MAX_SYNC_RETRIES = 10;
-const getRetryDelay = (attempt: number) => Math.min(1000 * attempt, 5000); // Progressive: 1s, 2s, 3s... max 5s
+const getRetryDelay = (attempt: number) => Math.min(1000 * attempt, 5000);
 
 export default function Pricing() {
   const [isLoading, setIsLoading] = useState(false);
@@ -22,7 +22,7 @@ export default function Pricing() {
   const { user, subscription, session, checkSubscription } = useAuth();
   const syncAttempted = useRef(false);
 
-  // Handle success redirect from Stripe with retry logic
+  // Handle success redirect from Mercado Pago with retry logic
   useEffect(() => {
     const handleSuccessReturn = async () => {
       if (searchParams.get('success') !== 'true' || syncAttempted.current) return;
@@ -38,7 +38,6 @@ export default function Pricing() {
       let retries = 0;
       let syncedSubscription = await checkSubscription();
 
-      // Retry with progressive delay if still on 'free' tier (Stripe might not have processed yet)
       while (syncedSubscription.tier === 'free' && retries < MAX_SYNC_RETRIES) {
         retries++;
         const delay = getRetryDelay(retries);
@@ -50,12 +49,9 @@ export default function Pricing() {
       if (syncedSubscription.tier !== 'free') {
         const tierInfo = SUBSCRIPTION_TIERS[syncedSubscription.tier];
         setConfirmedTierName(tierInfo?.name);
-        console.log('[Pricing] Subscription synced successfully:', syncedSubscription.tier);
         toast.success(`Plano ${tierInfo?.name || syncedSubscription.tier} ativado!`);
       } else {
-        // Fallback if sync failed after retries - still show modal with contact info
         setConfirmedTierName(undefined);
-        console.warn('[Pricing] Subscription sync failed after', MAX_SYNC_RETRIES, 'retries');
         toast.warning('Sincronização em andamento. Se o plano não aparecer em alguns minutos, entre em contato conosco.');
       }
 
@@ -65,7 +61,7 @@ export default function Pricing() {
     handleSuccessReturn();
   }, [searchParams, setSearchParams, checkSubscription]);
 
-  const handleSubscribe = async (priceId: string) => {
+  const handleSubscribe = async (planId: string) => {
     if (!session) {
       navigate('/auth');
       return;
@@ -74,7 +70,7 @@ export default function Pricing() {
     setIsLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { priceId },
+        body: { planId },
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
@@ -83,36 +79,11 @@ export default function Pricing() {
       if (error) throw error;
 
       if (data?.url) {
-        // Redirect in same tab for reliable sync on return
         window.location.href = data.url;
       }
     } catch (error) {
       console.error('Checkout error:', error);
       toast.error('Erro ao iniciar checkout. Tente novamente.');
-      setIsLoading(false);
-    }
-  };
-
-  const handleManage = async () => {
-    if (!session) return;
-
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('customer-portal', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.url) {
-        window.location.href = data.url;
-      }
-    } catch (error) {
-      console.error('Portal error:', error);
-      toast.error('Erro ao abrir portal. Tente novamente.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -165,7 +136,6 @@ export default function Pricing() {
                     currentTier={currentTier}
                     isLoading={isLoading}
                     onSubscribe={handleSubscribe}
-                    onManage={handleManage}
                     isLoggedIn={!!user}
                     onLogin={handleLogin}
                   />
