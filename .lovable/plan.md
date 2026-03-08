@@ -1,140 +1,52 @@
 
-# Plano: Sistema de Views com Anti-Fraude
 
-## Resumo
+## Diagnóstico: Botão "Criar Pix" desativado no Mercado Pago
 
-Criar a tabela `video_views`, uma Edge Function `record-view` para registro seguro, um hook `useVideoViews` no player, e exibir contagem de views nas paginas Admin e Producer com permissoes diferentes:
+### Causa raiz identificada
 
-- **Admin**: ve views de todos os conteudos
-- **Producer**: ve views somente dos seus conteudos
+O botão "Criar Pix" está desativado porque **você está testando com a mesma conta do Mercado Pago que é dona da integração (collector)**. O Mercado Pago **não permite que você pague para si mesmo**. Isso não é um bug no código — é uma restrição da plataforma.
 
----
+Para testar, use uma conta de comprador diferente (outro e-mail/CPF no Mercado Pago).
 
-## 1. Migracao SQL - Tabela `video_views`
+### Problemas adicionais encontrados
 
-```sql
-CREATE TABLE public.video_views (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  movie_id uuid NOT NULL REFERENCES public.movies(id) ON DELETE CASCADE,
-  user_id uuid NOT NULL,
-  producer_name text,
-  watched_seconds integer NOT NULL DEFAULT 0,
-  completed boolean NOT NULL DEFAULT false,
-  counted boolean NOT NULL DEFAULT false,
-  is_own_view boolean NOT NULL DEFAULT false,
-  flagged boolean NOT NULL DEFAULT false,
-  view_date date NOT NULL DEFAULT CURRENT_DATE,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE(user_id, movie_id, view_date)
-);
+Mesmo que o pagamento funcione com outra conta, existem dois problemas críticos que impedirão o sistema de funcionar corretamente:
 
-ALTER TABLE public.video_views ENABLE ROW LEVEL SECURITY;
+**1. `check-subscription` ainda busca preapprovals (assinaturas recorrentes)**
+- O checkout agora cria pagamentos avulsos via Preferences API, mas o `check-subscription` busca `preapproval/search?status=authorized` — que nunca encontrará pagamentos feitos via Checkout Pro.
+- Resultado: mesmo após pagar, o usuário continuará como "free".
 
--- Indices
-CREATE INDEX idx_video_views_movie ON public.video_views(movie_id);
-CREATE INDEX idx_video_views_producer_date ON public.video_views(producer_name, created_at);
-CREATE INDEX idx_video_views_user_date ON public.video_views(user_id, view_date);
+**2. `check-producer-purchase` ainda usa Stripe**
+- A função importa o SDK do Stripe e busca `paymentIntents` via Stripe, mas o checkout do produtor agora usa Mercado Pago.
+- Resultado: compras de produtor via Mercado Pago nunca serão detectadas.
 
--- RLS: Admins podem ler tudo
-CREATE POLICY "Admins can read all views"
-  ON public.video_views FOR SELECT
-  USING (public.has_role(auth.uid(), 'admin'));
+### Plano de correção
 
--- RLS: Usuarios podem ler suas proprias views
-CREATE POLICY "Users can read own views"
-  ON public.video_views FOR SELECT
-  USING (auth.uid() = user_id);
+#### Tarefa 1: Criar webhook do Mercado Pago
+Criar uma Edge Function `mp-webhook` que recebe notificações de pagamento do Mercado Pago. Quando um pagamento é aprovado:
+- Extrair `external_reference` (formato: `userId|tier`)
+- Para tiers de viewer (`standard`/`premium`): inserir/atualizar registro na tabela `admin_subscriptions` com `is_active=true` e validade de 30 dias
+- Para tiers de produtor: inserir registro na tabela `producer_purchases` com os uploads e validade corretos
 
--- RLS: Produtores podem ler views dos seus conteudos
-CREATE POLICY "Producers can read views of own content"
-  ON public.video_views FOR SELECT
-  USING (
-    public.has_role(auth.uid(), 'producer') AND
-    producer_name = (SELECT full_name FROM public.profiles WHERE id = auth.uid())
-  );
+#### Tarefa 2: Atualizar `check-subscription`
+Alterar para buscar assinaturas na tabela `admin_subscriptions` (ou nova tabela `subscriptions`) em vez de consultar a API de preapprovals do Mercado Pago. O webhook já terá gravado o pagamento no banco.
 
--- RLS: Somente service_role pode inserir/atualizar (via Edge Function)
--- Nenhuma policy de INSERT/UPDATE para authenticated = bloqueado
+#### Tarefa 3: Atualizar `check-producer-purchase`
+Remover dependência do Stripe. Buscar apenas na tabela `producer_purchases` local, que será populada pelo webhook.
 
--- Trigger updated_at
-CREATE TRIGGER set_video_views_updated_at
-  BEFORE UPDATE ON public.video_views
-  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+#### Tarefa 4: Criar tabela de pagamentos (se necessário)
+Criar uma tabela `payments` para registrar todos os pagamentos recebidos via webhook, servindo como audit log.
+
+### Detalhes técnicos
+
+```text
+Fluxo atual (quebrado):
+  User → Checkout Pro → Paga → Volta ao site → check-subscription busca preapproval → não encontra → "free"
+
+Fluxo corrigido:
+  User → Checkout Pro → Paga → MP envia webhook → mp-webhook grava no DB → check-subscription lê do DB → tier correto
 ```
 
-## 2. Edge Function `record-view`
+A URL do webhook será: `https://frakvusemijynkcfsywj.supabase.co/functions/v1/mp-webhook`
+Essa URL precisará ser configurada nas notificações do Mercado Pago (painel do MP → Integrações → Notificações IPN/Webhooks).
 
-**Arquivo**: `supabase/functions/record-view/index.ts`
-
-**Config** em `supabase/config.toml`:
-```toml
-[functions.record-view]
-verify_jwt = false
-```
-
-**Logica**:
-- Recebe `{ movieId, watchedSeconds }` via POST
-- Valida autenticacao (Bearer token)
-- Busca dados do filme (`producer_name`) e do usuario (`full_name`)
-- Detecta `is_own_view` comparando `producer_name == full_name`
-- Usa UPSERT com constraint `(user_id, movie_id, view_date)`:
-  - Se ja existe registro hoje, atualiza `watched_seconds` e `updated_at`
-  - Se nao existe, insere novo
-- Rate limit: conta views do usuario hoje; se > 20, rejeita
-- Marca `counted = true` se `watched_seconds >= 60` e `is_own_view = false`
-- Marca `completed = true` se assistiu > 90% da duracao do filme
-
-## 3. Hook `src/hooks/useVideoViews.ts`
-
-- `startView(movieId)`: chama Edge Function com `watchedSeconds = 0`
-- `updateView(movieId, seconds)`: chama Edge Function com segundos acumulados
-- Usa `useRef` para acumular tempo e enviar a cada 30 segundos
-- No `useEffect cleanup`, envia o tempo final via `navigator.sendBeacon` ou `fetch` com `keepalive: true`
-
-## 4. Integracao no `VideoPlayer.tsx`
-
-- Importar e usar `useVideoViews`
-- Ao iniciar reproducao: `startView(movieId)`
-- No loop RAF existente: acumular `watchedSeconds` e enviar a cada 30s
-- No cleanup do componente: enviar tempo final
-
-## 5. Exibir Views na Tabela Admin (`src/pages/admin/Movies.tsx`)
-
-- Criar hook `useMovieViewCounts()` que faz query agrupada:
-  ```sql
-  SELECT movie_id, COUNT(*) as total_views, 
-         COUNT(*) FILTER (WHERE counted) as valid_views
-  FROM video_views GROUP BY movie_id
-  ```
-- Adicionar coluna "Views" na tabela com badge mostrando o total
-- Admin ve views de todos os filmes (RLS ja permite)
-
-## 6. Exibir Views na Tabela Producer (`src/pages/producer/Movies.tsx`)
-
-- Reutilizar `useMovieViewCounts()` - RLS garante que produtor so ve views dos seus conteudos
-- Adicionar coluna "Views" na tabela do produtor
-- Adicionar card de estatisticas com total de views
-
-## Arquivos Criados/Alterados
-
-| Arquivo | Acao |
-|---------|------|
-| Migracao SQL | Criar tabela `video_views` |
-| `supabase/config.toml` | Adicionar config `record-view` |
-| `supabase/functions/record-view/index.ts` | Criar Edge Function |
-| `src/hooks/useVideoViews.ts` | Criar hook de tracking |
-| `src/hooks/useMovieViewCounts.ts` | Criar hook de contagem |
-| `src/components/video/VideoPlayer.tsx` | Integrar tracking |
-| `src/pages/admin/Movies.tsx` | Adicionar coluna Views |
-| `src/pages/producer/Movies.tsx` | Adicionar coluna Views + card |
-
-## Seguranca
-
-- Clientes nao podem inserir direto na tabela (sem policy INSERT para authenticated)
-- Toda insercao passa pela Edge Function com service_role
-- Produtor ve somente views dos seus conteudos (RLS por `producer_name`)
-- Admin ve tudo
-- Views do proprio produtor sao marcadas e nao contam para royalties
-- Rate limit de 20 views validas por dia por usuario
-- Deduplicacao: 1 view por usuario por filme por dia
