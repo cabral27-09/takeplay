@@ -33,7 +33,9 @@ serve(async (req) => {
     const user = data.user;
     if (!user?.email) throw new Error("User not authenticated or email not available");
 
-    const { planId } = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({}));
+    logStep("Request body", body);
+    const { planId } = body;
     if (!planId) throw new Error("planId is required");
     logStep("Plan ID received", { planId });
 
