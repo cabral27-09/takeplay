@@ -82,6 +82,8 @@ serve(async (req) => {
         payer_email: user.email,
         back_url: `${origin}/pricing?success=true`,
         external_reference: user.id,
+        status: "pending",
+        reason: "Assinatura TakePlay",
       }),
     });
 
