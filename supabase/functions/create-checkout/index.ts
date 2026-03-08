@@ -40,7 +40,18 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     logStep("Request body", body);
-    const { planId } = body;
+
+    const legacyMappedPlanId =
+      typeof body?.priceId === "string" ? LEGACY_PRICE_TO_PLAN[body.priceId] : undefined;
+
+    if (body?.priceId && legacyMappedPlanId) {
+      logStep("Mapped legacy priceId to planId", {
+        priceId: body.priceId,
+        planId: legacyMappedPlanId,
+      });
+    }
+
+    const planId = body?.planId ?? legacyMappedPlanId;
     if (!planId) throw new Error("planId is required");
     logStep("Plan ID received", { planId });
 
