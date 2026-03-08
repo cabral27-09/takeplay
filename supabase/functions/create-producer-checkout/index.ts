@@ -10,7 +10,6 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-PRODUCER-CHECKOUT] ${step}`, details ? JSON.stringify(details) : '');
 };
 
-// Producer product configs mapped by a simple key
 const PRODUCER_PRODUCTS: Record<string, { title: string; price: number; tier: string }> = {
   produtor_anual: { title: 'TakePlay Produtor Anual - 10 uploads', price: 299.90, tier: 'produtor_anual' },
   produtor_semestral: { title: 'TakePlay Produtor Semestral - 5 uploads', price: 179.90, tier: 'produtor_semestral' },
@@ -46,13 +45,12 @@ serve(async (req) => {
     const mpToken = Deno.env.get("MP_ACCESS_TOKEN");
     if (!mpToken) throw new Error("MP_ACCESS_TOKEN not set");
 
-    // Robust origin fallback
     const origin = req.headers.get("origin") 
       || req.headers.get("referer")?.split("/").slice(0, 3).join("/") 
       || "https://takeplay.lovable.app";
     logStep("Origin determined", { origin });
 
-    // Create a checkout preference (one-time payment) via Mercado Pago
+    // Checkout Pro (preferences API) — supports PIX, credit card, boleto
     const preferenceRes = await fetch("https://api.mercadopago.com/checkout/preferences", {
       method: "POST",
       headers: {
@@ -70,6 +68,10 @@ serve(async (req) => {
         ],
         payer: {
           email: user.email,
+        },
+        payment_methods: {
+          excluded_payment_types: [],
+          installments: 1,
         },
         back_urls: {
           success: `${origin}/producer/pricing?success=true`,
