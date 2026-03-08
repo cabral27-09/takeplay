@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle, Sparkles, Loader2, ExternalLink, Mail } from 'lucide-react';
+import { CheckCircle, Sparkles, Loader2, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -23,11 +20,8 @@ interface PaymentSuccessModalProps {
 
 export function PaymentSuccessModal({ isOpen, onClose, tierName, isLoading = false }: PaymentSuccessModalProps) {
   const navigate = useNavigate();
-  const { session } = useAuth();
-  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
 
   useEffect(() => {
-    // Only auto-close after loading is complete - extended to 15s for user to see options
     if (isOpen && !isLoading) {
       const timer = setTimeout(() => {
         onClose();
@@ -41,30 +35,6 @@ export function PaymentSuccessModal({ isOpen, onClose, tierName, isLoading = fal
     navigate('/browse');
   };
 
-  const handleViewInvoice = async () => {
-    if (!session) return;
-    
-    setIsOpeningPortal(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('customer-portal', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.url) {
-        window.open(data.url, '_blank');
-      }
-    } catch (error) {
-      console.error('Portal error:', error);
-      toast.error('Erro ao abrir portal. Tente novamente.');
-    } finally {
-      setIsOpeningPortal(false);
-    }
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md border-primary/20 bg-card">
@@ -73,16 +43,10 @@ export function PaymentSuccessModal({ isOpen, onClose, tierName, isLoading = fal
         </DialogHeader>
         
         <div className="flex flex-col items-center text-center py-6">
-          {/* Animated Check Icon or Loading */}
           <motion.div
             initial={{ scale: 0, rotate: -180 }}
             animate={{ scale: 1, rotate: 0 }}
-            transition={{ 
-              type: "spring", 
-              stiffness: 200, 
-              damping: 15,
-              delay: 0.1 
-            }}
+            transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
             className="relative mb-6"
           >
             <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center">
@@ -93,7 +57,6 @@ export function PaymentSuccessModal({ isOpen, onClose, tierName, isLoading = fal
               )}
             </div>
             
-            {/* Sparkles animation - only show when not loading */}
             {!isLoading && (
               <>
                 <motion.div
@@ -116,7 +79,6 @@ export function PaymentSuccessModal({ isOpen, onClose, tierName, isLoading = fal
             )}
           </motion.div>
 
-          {/* Success Message with Loading State */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -151,7 +113,6 @@ export function PaymentSuccessModal({ isOpen, onClose, tierName, isLoading = fal
             )}
           </motion.div>
 
-          {/* CTA Buttons */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -166,27 +127,8 @@ export function PaymentSuccessModal({ isOpen, onClose, tierName, isLoading = fal
             >
               {isLoading ? 'Aguarde...' : 'Começar a Assistir'}
             </Button>
-            
-            {/* View Invoice Button - only show when not loading */}
-            {!isLoading && (
-              <Button 
-                onClick={handleViewInvoice}
-                variant="outline"
-                className="w-full"
-                size="lg"
-                disabled={isOpeningPortal}
-              >
-                {isOpeningPortal ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                )}
-                Ver Fatura / Recibo
-              </Button>
-            )}
           </motion.div>
 
-          {/* Email notice - only show when not loading */}
           {!isLoading && (
             <motion.div
               initial={{ opacity: 0 }}

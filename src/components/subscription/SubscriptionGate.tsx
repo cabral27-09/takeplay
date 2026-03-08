@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Lock, Crown, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { SUBSCRIPTION_TIERS } from "@/lib/subscription-tiers";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -44,6 +45,7 @@ export function SubscriptionGate({ children, movieTitle, movieTier = 'premium' }
       }
 
       const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: { planId: SUBSCRIPTION_TIERS.premium.planId },
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },

@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
@@ -11,12 +10,12 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-PRODUCER-CHECKOUT] ${step}`, details ? JSON.stringify(details) : '');
 };
 
-// Valid producer price IDs
-const VALID_PRODUCER_PRICES = [
-  'price_1StDgyCeLx1o0X2J05Ip3ZI0', // produtor_anual
-  'price_1StDjLCeLx1o0X2JiTaGtE8R', // produtor_semestral
-  'price_1StDkPCeLx1o0X2JR93OuCwW', // produtor_avulso
-];
+// Producer product configs mapped by a simple key
+const PRODUCER_PRODUCTS: Record<string, { title: string; price: number; tier: string }> = {
+  produtor_anual: { title: 'TakePlay Produtor Anual - 10 uploads', price: 299.90, tier: 'produtor_anual' },
+  produtor_semestral: { title: 'TakePlay Produtor Semestral - 5 uploads', price: 179.90, tier: 'produtor_semestral' },
+  produtor_avulso: { title: 'TakePlay Upload Avulso - 1 upload', price: 49.90, tier: 'produtor_avulso' },
+};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -38,14 +37,14 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     logStep("User authenticated", { userId: user.id, email: user.email });
 
-    const { priceId } = await req.json().catch(() => ({}));
-    if (!priceId) throw new Error("priceId is required");
+    const { tier } = await req.json().catch(() => ({}));
+    if (!tier || !PRODUCER_PRODUCTS[tier]) throw new Error("Invalid tier");
     
-    // Validate that this is a producer price
-    if (!VALID_PRODUCER_PRICES.includes(priceId)) {
-      throw new Error("Invalid producer priceId");
-    }
-    logStep("Price ID validated", { priceId });
+    const product = PRODUCER_PRODUCTS[tier];
+    logStep("Product selected", { tier, product });
+
+    const mpToken = Deno.env.get("MP_ACCESS_TOKEN");
+    if (!mpToken) throw new Error("MP_ACCESS_TOKEN not set");
 
     // Robust origin fallback
     const origin = req.headers.get("origin") 
@@ -53,39 +52,52 @@ serve(async (req) => {
       || "https://takeplay.lovable.app";
     logStep("Origin determined", { origin });
 
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", { 
-      apiVersion: "2025-08-27.basil" 
-    });
-
-    // Check for existing customer
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    let customerId;
-    if (customers.data.length > 0) {
-      customerId = customers.data[0].id;
-    }
-    logStep("Customer lookup complete", { customerId: customerId || 'new customer', email: user.email });
-
-    // Create one-time payment session (not subscription)
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      customer_email: customerId ? undefined : user.email,
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
-      mode: "payment", // One-time payment, not subscription
-      success_url: `${origin}/producer/pricing?success=true`,
-      cancel_url: `${origin}/producer/pricing`,
-      metadata: {
-        user_id: user.id,
-        price_id: priceId,
+    // Create a checkout preference (one-time payment) via Mercado Pago
+    const preferenceRes = await fetch("https://api.mercadopago.com/checkout/preferences", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${mpToken}`,
       },
+      body: JSON.stringify({
+        items: [
+          {
+            title: product.title,
+            quantity: 1,
+            unit_price: product.price,
+            currency_id: "BRL",
+          },
+        ],
+        payer: {
+          email: user.email,
+        },
+        back_urls: {
+          success: `${origin}/producer/pricing?success=true`,
+          failure: `${origin}/producer/pricing`,
+          pending: `${origin}/producer/pricing?pending=true`,
+        },
+        auto_return: "approved",
+        external_reference: `${user.id}|${tier}`,
+        metadata: {
+          user_id: user.id,
+          tier: tier,
+        },
+      }),
     });
-    logStep("Checkout session created", { sessionId: session.id, url: session.url });
 
-    return new Response(JSON.stringify({ url: session.url }), {
+    const preferenceData = await preferenceRes.json();
+    logStep("Preference response", { status: preferenceRes.status, id: preferenceData.id });
+
+    if (!preferenceRes.ok) {
+      throw new Error(`Mercado Pago error: ${JSON.stringify(preferenceData)}`);
+    }
+
+    const url = preferenceData.init_point;
+    if (!url) throw new Error("No init_point returned from Mercado Pago");
+
+    logStep("Checkout URL generated", { url });
+
+    return new Response(JSON.stringify({ url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });

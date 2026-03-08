@@ -23,16 +23,13 @@ export default function ProducerPricing() {
   const isProducer = hasRole('producer');
   const success = searchParams.get('success') === 'true';
 
-  // Handle success redirect
   useEffect(() => {
     if (success) {
       toast({
         title: 'Compra realizada!',
         description: 'Seu plano foi ativado com sucesso. Você já pode enviar seus filmes!',
       });
-      // Refresh purchase info
       checkPurchase();
-      // Clean URL
       navigate('/producer/pricing', { replace: true });
     }
   }, [success, toast, navigate, checkPurchase]);
@@ -52,7 +49,6 @@ export default function ProducerPricing() {
       return;
     }
 
-    const tierInfo = PRODUCER_TIERS[tier];
     setLoadingTier(tier);
 
     try {
@@ -65,13 +61,12 @@ export default function ProducerPricing() {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: { priceId: tierInfo.priceId },
+        body: { tier },
       });
 
       if (error) throw error;
       if (!data?.url) throw new Error('URL de checkout não retornada');
 
-      // Open in new tab
       window.open(data.url, '_blank');
     } catch (error) {
       console.error('Checkout error:', error);
@@ -107,7 +102,6 @@ export default function ProducerPricing() {
   return (
     <Layout>
       <div className="container max-w-6xl py-12">
-        {/* Header */}
         <div className="text-center mb-12">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
@@ -127,7 +121,6 @@ export default function ProducerPricing() {
           </motion.div>
         </div>
 
-        {/* Current Plan Status */}
         {purchaseInfo.hasActivePurchase && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -161,7 +154,6 @@ export default function ProducerPricing() {
           </motion.div>
         )}
 
-        {/* Pricing Cards */}
         <div className="grid md:grid-cols-3 gap-6">
           {(Object.entries(PRODUCER_TIERS) as [ProducerTier, ProducerTierInfo][]).map(
             ([tier, info], index) => (
@@ -238,10 +230,9 @@ export default function ProducerPricing() {
           )}
         </div>
 
-        {/* Footer Note */}
         <div className="text-center mt-12 text-sm text-muted-foreground">
           <p>
-            Pagamento único e seguro via Stripe. Os uploads são válidos pelo período indicado em cada plano.
+            Pagamento único e seguro via Mercado Pago. Os uploads são válidos pelo período indicado em cada plano.
           </p>
           <p className="mt-2">
             Dúvidas? Entre em contato com nosso{' '}

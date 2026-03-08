@@ -9,8 +9,7 @@ interface PricingCardProps {
   info: TierInfo;
   currentTier: SubscriptionTier;
   isLoading: boolean;
-  onSubscribe: (priceId: string) => void;
-  onManage: () => void;
+  onSubscribe: (planId: string) => void;
   isLoggedIn: boolean;
   onLogin: () => void;
 }
@@ -21,7 +20,6 @@ export function PricingCard({
   currentTier,
   isLoading,
   onSubscribe,
-  onManage,
   isLoggedIn,
   onLogin,
 }: PricingCardProps) {
@@ -35,13 +33,8 @@ export function PricingCard({
       return;
     }
 
-    if (isCurrentPlan && !isFree) {
-      onManage();
-      return;
-    }
-
-    if (canUpgrade && info.priceId) {
-      onSubscribe(info.priceId);
+    if (canUpgrade && info.planId) {
+      onSubscribe(info.planId);
     }
   };
 
@@ -50,7 +43,7 @@ export function PricingCard({
       return isFree ? "Criar Conta Grátis" : "Assine para assistir";
     }
     if (isCurrentPlan) {
-      return isFree ? "Seu Plano Atual" : "Gerenciar Assinatura";
+      return "Seu Plano Atual";
     }
     return "Assinar Agora";
   };
@@ -109,7 +102,7 @@ export function PricingCard({
       {/* Action Button */}
       <Button
         onClick={handleAction}
-        disabled={isLoading || (isCurrentPlan && isFree)}
+        disabled={isLoading || isCurrentPlan}
         variant={info.highlighted ? "default" : "outline"}
         className="w-full"
         size="lg"

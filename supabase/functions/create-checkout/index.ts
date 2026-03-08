@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
@@ -9,6 +8,12 @@ const corsHeaders = {
 
 const logStep = (step: string, details?: any) => {
   console.log(`[CREATE-CHECKOUT] ${step}`, details ? JSON.stringify(details) : '');
+};
+
+// Mercado Pago Plan IDs
+const PLAN_IDS: Record<string, string> = {
+  standard: 'bb8d14e00c0a4dbba6cad6128b6b485e',
+  premium: '05fed28083034eada6865427fc70fe96',
 };
 
 serve(async (req) => {
@@ -28,10 +33,18 @@ serve(async (req) => {
     const user = data.user;
     if (!user?.email) throw new Error("User not authenticated or email not available");
 
-    // Get priceId from request body
-    const { priceId } = await req.json().catch(() => ({}));
-    if (!priceId) throw new Error("priceId is required");
-    logStep("Price ID received", { priceId });
+    const { planId } = await req.json().catch(() => ({}));
+    if (!planId) throw new Error("planId is required");
+    logStep("Plan ID received", { planId });
+
+    // Validate plan ID
+    const validPlanIds = Object.values(PLAN_IDS);
+    if (!validPlanIds.includes(planId)) {
+      throw new Error("Invalid planId");
+    }
+
+    const mpToken = Deno.env.get("MP_ACCESS_TOKEN");
+    if (!mpToken) throw new Error("MP_ACCESS_TOKEN not set");
 
     // Robust origin fallback
     const origin = req.headers.get("origin") 
@@ -39,49 +52,40 @@ serve(async (req) => {
       || "https://takeplay.lovable.app";
     logStep("Origin determined", { origin });
 
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", { 
-      apiVersion: "2025-08-27.basil" 
+    // Create a preapproval (subscription) via Mercado Pago API
+    const preapprovalRes = await fetch("https://api.mercadopago.com/preapproval", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${mpToken}`,
+      },
+      body: JSON.stringify({
+        preapproval_plan_id: planId,
+        payer_email: user.email,
+        back_url: `${origin}/pricing?success=true`,
+        external_reference: user.id,
+      }),
     });
-    
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    let customerId;
-    if (customers.data.length > 0) {
-      customerId = customers.data[0].id;
+
+    const preapprovalData = await preapprovalRes.json();
+    logStep("Preapproval response", { status: preapprovalRes.status, id: preapprovalData.id });
+
+    if (!preapprovalRes.ok) {
+      throw new Error(`Mercado Pago error: ${JSON.stringify(preapprovalData)}`);
     }
-    logStep("Customer lookup complete", { customerId: customerId || 'new customer', email: user.email });
 
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      customer_email: customerId ? undefined : user.email,
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
-      mode: "subscription",
-      success_url: `${origin}/pricing?success=true`,
-      cancel_url: `${origin}/pricing`,
-      // Enable automatic invoice creation for receipts
-      invoice_creation: {
-        enabled: true,
-      },
-      // Ensure subscription generates invoices
-      subscription_data: {
-        metadata: {
-          user_id: user.id,
-          user_email: user.email,
-        },
-      },
-    });
-    logStep("Checkout session created with invoice enabled", { sessionId: session.id, url: session.url });
+    const url = preapprovalData.init_point;
+    if (!url) throw new Error("No init_point returned from Mercado Pago");
 
-    return new Response(JSON.stringify({ url: session.url }), {
+    logStep("Checkout URL generated", { url });
+
+    return new Response(JSON.stringify({ url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    logStep("ERROR", { message: errorMessage });
     return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
