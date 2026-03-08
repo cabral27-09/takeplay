@@ -45,6 +45,7 @@ export function SubscriptionGate({ children, movieTitle, movieTier = 'premium' }
       }
 
       const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: { planId: SUBSCRIPTION_TIERS.premium.planId },
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
