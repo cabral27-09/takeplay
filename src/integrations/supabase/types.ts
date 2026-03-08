@@ -202,6 +202,48 @@ export type Database = {
           },
         ]
       }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          external_reference: string | null
+          id: string
+          mp_payment_id: string
+          mp_preference_id: string | null
+          payment_method: string | null
+          status: string
+          tier: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          external_reference?: string | null
+          id?: string
+          mp_payment_id: string
+          mp_preference_id?: string | null
+          payment_method?: string | null
+          status?: string
+          tier: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          external_reference?: string | null
+          id?: string
+          mp_payment_id?: string
+          mp_preference_id?: string | null
+          payment_method?: string | null
+          status?: string
+          tier?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       producer_purchases: {
         Row: {
           created_at: string
