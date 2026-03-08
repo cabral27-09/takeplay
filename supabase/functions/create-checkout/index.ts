@@ -94,7 +94,7 @@ serve(async (req) => {
       throw new Error(`Mercado Pago error: ${JSON.stringify(preapprovalData)}`);
     }
 
-    const url = preapprovalData.init_point;
+    const url = preapprovalData.init_point ?? preapprovalData.sandbox_init_point;
     if (!url) throw new Error("No init_point returned from Mercado Pago");
 
     logStep("Checkout URL generated", { url });
