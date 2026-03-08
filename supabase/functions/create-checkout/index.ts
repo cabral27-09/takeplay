@@ -70,32 +70,33 @@ serve(async (req) => {
       || "https://takeplay.lovable.app";
     logStep("Origin determined", { origin });
 
-    // Create a preapproval (subscription) via Mercado Pago API
-    const preapprovalRes = await fetch("https://api.mercadopago.com/preapproval", {
-      method: "POST",
+    // Fetch the subscription plan and use its hosted checkout URL (init_point)
+    // This avoids requiring card_token_id in our backend.
+    const planRes = await fetch(`https://api.mercadopago.com/preapproval_plan/${planId}`, {
+      method: "GET",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${mpToken}`,
       },
-      body: JSON.stringify({
-        preapproval_plan_id: planId,
-        payer_email: user.email,
-        back_url: `${origin}/pricing?success=true`,
-        external_reference: user.id,
-        status: "pending",
-        reason: "Assinatura TakePlay",
-      }),
     });
 
-    const preapprovalData = await preapprovalRes.json();
-    logStep("Preapproval response", { status: preapprovalRes.status, id: preapprovalData.id });
+    const planData = await planRes.json();
+    logStep("Plan fetch response", { status: planRes.status, id: planData?.id });
 
-    if (!preapprovalRes.ok) {
-      throw new Error(`Mercado Pago error: ${JSON.stringify(preapprovalData)}`);
+    if (!planRes.ok) {
+      throw new Error(`Mercado Pago plan error: ${JSON.stringify(planData)}`);
     }
 
-    const url = preapprovalData.init_point ?? preapprovalData.sandbox_init_point;
-    if (!url) throw new Error("No init_point returned from Mercado Pago");
+    const planInitPoint = planData?.init_point;
+    const fallbackInitPoint = `https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=${encodeURIComponent(planId)}`;
+
+    const checkoutUrl = new URL(planInitPoint || fallbackInitPoint);
+    checkoutUrl.searchParams.set("preapproval_plan_id", planId);
+    checkoutUrl.searchParams.set("external_reference", user.id);
+    checkoutUrl.searchParams.set("payer_email", user.email);
+    checkoutUrl.searchParams.set("back_url", `${origin}/pricing?success=true`);
+
+    const url = checkoutUrl.toString();
 
     logStep("Checkout URL generated", { url });
 
