@@ -42,7 +42,7 @@ serve(async (req) => {
     const product = PRODUCER_PRODUCTS[tier];
     logStep("Product selected", { tier, product });
 
-    const mpToken = Deno.env.get("MP_ACCESS_TOKEN");
+    const mpToken = Deno.env.get("MP_ACESS_TOKEN");
     if (!mpToken) throw new Error("MP_ACCESS_TOKEN not set");
 
     const origin = req.headers.get("origin") 

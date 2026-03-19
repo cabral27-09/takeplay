@@ -46,7 +46,7 @@ serve(async (req) => {
     }
 
     // Fetch payment details from Mercado Pago
-    const mpToken = Deno.env.get("MP_ACCESS_TOKEN");
+    const mpToken = Deno.env.get("MP_ACESS_TOKEN");
     if (!mpToken) throw new Error("MP_ACCESS_TOKEN not set");
 
     const paymentRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
