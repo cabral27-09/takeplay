@@ -1,26 +1,34 @@
 
 
-## Plano: Card inteiro clicável com hover e feedback visual
+## Plano: Adicionar seletor de tier e gênero "Ação" no fluxo de upload
 
-### O que muda
+### Problema 1: Sem seletor de nível de acesso (min_tier) no upload do produtor
 
-Transformar o `motion.div` do `PricingCard` em um elemento clicável inteiro, com:
+O formulário do produtor (`src/pages/producer/UploadMovie.tsx`) não tem o campo para escolher qual tipo de assinatura pode assistir ao conteúdo. Ele sempre salva como `free`. O admin tem esse campo, mas o produtor não.
 
-1. **Cursor pointer** no card (exceto quando é o plano atual)
-2. **Hover sutil** — leve elevação de borda e brilho ao passar o mouse (`hover:border-primary/50 hover:shadow-md`)
-3. **Active state** — mudança de cor ao clicar (`active:bg-primary/10`)
-4. **onClick no card** — chama a mesma `handleAction` que o botão já usa
-5. **Transição suave** — `transition-all duration-200`
+### Problema 2: Gênero "Ação" não existe no banco de dados
 
-### Arquivo: `src/components/pricing/PricingCard.tsx`
+Os gêneros atuais na categoria `geral` são: Animação, Aventura, Comédia, Documentário, Drama, Ficção Científica, Romance, Suspense, Terror. Falta **Ação**.
 
-- Adicionar `onClick={handleAction}` no `motion.div` raiz
-- Adicionar classes condicionais de hover/active/cursor (desabilitado se `isCurrentPlan` ou `isLoading`)
-- O botão interno permanece para manter a affordance visual, mas o card inteiro será clicável
+### Solução
 
-### Comportamento
+#### 1. Inserir gênero "Ação" no banco de dados
 
-- Plano atual: card **não** clicável, sem cursor pointer
-- Outros planos: card clicável, hover com brilho sutil, click leva ao checkout
-- Usuário não logado: click redireciona para login (mesmo comportamento atual)
+Usar o insert tool para adicionar:
+```sql
+INSERT INTO genres (name, slug, category) VALUES ('Ação', 'acao', 'geral');
+```
+
+#### 2. Adicionar seção "Nível de Acesso" no formulário do produtor
+
+No arquivo `src/pages/producer/UploadMovie.tsx`, adicionar uma seção entre "Gêneros" e "Mídia" com um `Select` para `min_tier`:
+
+- Opções: Grátis / Standard / Premium
+- Quando série existente selecionada: campo desabilitado (herdado)
+- Mesmo padrão visual usado no admin (`MovieForm.tsx`)
+
+### Arquivos a editar
+
+1. **Banco de dados** — INSERT do gênero "Ação"
+2. **`src/pages/producer/UploadMovie.tsx`** — adicionar seletor de `min_tier` com label "Quem pode assistir?"
 
