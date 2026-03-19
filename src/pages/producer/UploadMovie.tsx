@@ -695,6 +695,17 @@ export default function ProducerUploadMovie() {
                       />
                     </div>
 
+                    <div className="space-y-2">
+                      <Label htmlFor="producer_name">Produtora *</Label>
+                      <Input
+                        id="producer_name"
+                        value={formData.producer_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, producer_name: e.target.value }))}
+                        placeholder="Nome da produtora ou produtor"
+                        required
+                      />
+                    </div>
+
                     {/* Duration - only for filme/espetaculo, not series parent */}
                     {!isCreatingSeriesParent && (
                       <div className="space-y-2">
