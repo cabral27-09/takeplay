@@ -295,6 +295,19 @@ export const Header = () => {
                       {roles.includes("admin") && (
                         <>
                           <DropdownMenuItem asChild>
+                            <Link to="/admin/series/new" className="cursor-pointer">
+                              <Tv className="mr-2 h-4 w-4" />
+                              Criar Série
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link to="/admin/upload" className="cursor-pointer">
+                              <Upload className="mr-2 h-4 w-4" />
+                              Subir Vídeos
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem asChild>
                             <Link to="/admin/approval" className="cursor-pointer">
                               <CheckCircle className="mr-2 h-4 w-4" />
                               Aprovar Vídeos

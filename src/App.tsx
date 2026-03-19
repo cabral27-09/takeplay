@@ -63,6 +63,8 @@ const App = () => (
               <Route path="/admin/movies/:id/edit" element={<MovieForm />} />
               <Route path="/admin/users" element={<AdminUsers />} />
               <Route path="/admin/approval" element={<VideoApproval />} />
+              <Route path="/admin/series/new" element={<CreateSeries />} />
+              <Route path="/admin/upload" element={<UploadVideo />} />
               {/* Producer routes */}
               <Route path="/producer/movies" element={<ProducerMovies />} />
               <Route path="/producer/movies/new" element={<ProducerUploadMovie />} />
