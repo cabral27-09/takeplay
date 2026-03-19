@@ -4,6 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { UploadProvider } from "@/contexts/UploadContext";
+import { GlobalUploadIndicator } from "@/components/upload/GlobalUploadIndicator";
 import Index from "./pages/Index";
 import MovieDetail from "./pages/MovieDetail";
 import Watch from "./pages/Watch";
