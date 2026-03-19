@@ -489,33 +489,33 @@ export default function MovieForm() {
               </div>
               
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="title">
-                    {formData.content_type === 'serie' ? 'Nome da Série *' : 'Título *'}
-                  </Label>
-                  <Input
-                    id="title"
-                    value={formData.title}
-                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder={formData.content_type === 'serie' ? 'Nome da série' : formData.content_type === 'espetaculo' ? 'Nome do espetáculo' : 'Nome do filme'}
-                    required
-                    disabled={isExistingSeriesSelected}
-                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
-                  />
-                </div>
+                {!isAddingEpisode && (
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="title">
+                      {formData.content_type === 'serie' ? 'Nome da Série *' : 'Título *'}
+                    </Label>
+                    <Input
+                      id="title"
+                      value={formData.title}
+                      onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder={formData.content_type === 'serie' ? 'Nome da série' : formData.content_type === 'espetaculo' ? 'Nome do espetáculo' : 'Nome do filme'}
+                      required
+                    />
+                  </div>
+                )}
 
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="synopsis">Sinopse</Label>
-                  <Textarea
-                    id="synopsis"
-                    value={formData.synopsis}
-                    onChange={(e) => setFormData(prev => ({ ...prev, synopsis: e.target.value }))}
-                    placeholder="Descrição do filme..."
-                    rows={4}
-                    disabled={isExistingSeriesSelected}
-                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
-                  />
-                </div>
+                {!isAddingEpisode && (
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="synopsis">Sinopse</Label>
+                    <Textarea
+                      id="synopsis"
+                      value={formData.synopsis}
+                      onChange={(e) => setFormData(prev => ({ ...prev, synopsis: e.target.value }))}
+                      placeholder="Descrição do filme..."
+                      rows={4}
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="year">Ano</Label>
@@ -531,19 +531,19 @@ export default function MovieForm() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="duration">Duração (min)</Label>
-                  <Input
-                    id="duration"
-                    type="number"
-                    min={1}
-                    max={600}
-                    value={formData.duration}
-                    onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
-                    disabled={isExistingSeriesSelected}
-                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
-                  />
-                </div>
+                {!isAddingEpisode && (
+                  <div className="space-y-2">
+                    <Label htmlFor="duration">Duração (min)</Label>
+                    <Input
+                      id="duration"
+                      type="number"
+                      min={1}
+                      max={600}
+                      value={formData.duration}
+                      onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="age_rating">Classificação Etária</Label>
