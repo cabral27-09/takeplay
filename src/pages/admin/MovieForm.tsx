@@ -169,7 +169,25 @@ export default function MovieForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.title.trim()) {
+    // When adding episode, validate episode-specific fields
+    if (isAddingEpisode && !isEditing) {
+      if (!episodeTitle.trim()) {
+        toast({
+          title: 'Erro de validação',
+          description: 'O título do episódio é obrigatório.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (!formData.video_url) {
+        toast({
+          title: 'Erro de validação',
+          description: 'O vídeo do episódio é obrigatório.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    } else if (!formData.title.trim()) {
       toast({
         title: 'Erro de validação',
         description: 'O título é obrigatório.',
@@ -178,26 +196,46 @@ export default function MovieForm() {
       return;
     }
 
+    // Build submission data
+    let submitData = { ...formData };
+    
+    // Series parent: no video needed
+    if (isCreatingSeriesParent) {
+      submitData.video_url = '';
+    }
+    
+    // Episode: use episode-specific fields
+    if (isAddingEpisode && !isEditing) {
+      submitData.title = episodeTitle;
+      submitData.synopsis = episodeSynopsis;
+      submitData.duration = episodeDuration;
+      submitData.thumbnail_url = episodeThumbnail || formData.thumbnail_url;
+    }
+
+    const contentLabel = isCreatingSeriesParent ? 'Série' : isAddingEpisode ? 'Episódio' : formData.content_type === 'espetaculo' ? 'Espetáculo' : 'Filme';
+
     try {
       if (isEditing && id) {
-        await updateMovie.mutateAsync({ id, formData });
+        await updateMovie.mutateAsync({ id, formData: submitData });
         toast({
-          title: 'Filme atualizado',
+          title: `${contentLabel} atualizado`,
           description: 'As alterações foram salvas com sucesso.',
         });
       } else {
-        await createMovie.mutateAsync(formData);
+        await createMovie.mutateAsync(submitData);
         toast({
-          title: 'Filme criado',
-          description: 'O filme foi cadastrado com sucesso.',
+          title: `${contentLabel} criado`,
+          description: isCreatingSeriesParent 
+            ? 'A série foi criada. Agora você pode adicionar episódios.'
+            : `O ${contentLabel.toLowerCase()} foi cadastrado com sucesso.`,
         });
       }
       navigate('/admin/movies');
     } catch (error) {
-      console.error('Error saving movie:', error);
+      console.error('Error saving:', error);
       toast({
         title: 'Erro ao salvar',
-        description: 'Não foi possível salvar o filme. Tente novamente.',
+        description: `Não foi possível salvar. Tente novamente.`,
         variant: 'destructive',
       });
     }
