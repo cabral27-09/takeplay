@@ -677,19 +677,21 @@ export default function MovieForm() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>
-                  {formData.content_type === 'serie' 
-                    ? 'Vídeo do Episódio' 
-                    : formData.content_type === 'espetaculo' 
-                      ? 'Vídeo do Espetáculo' 
-                      : 'Vídeo do Filme'}
-                </Label>
-                <VideoUploader
-                  value={formData.video_url}
-                  onChange={(url) => setFormData(prev => ({ ...prev, video_url: url }))}
-                />
-              </div>
+              {!isCreatingSeriesParent && (
+                <div className="space-y-2">
+                  <Label>
+                    {isAddingEpisode 
+                      ? 'Vídeo do Episódio *' 
+                      : formData.content_type === 'espetaculo' 
+                        ? 'Vídeo do Espetáculo' 
+                        : 'Vídeo do Filme'}
+                  </Label>
+                  <VideoUploader
+                    value={formData.video_url}
+                    onChange={(url) => setFormData(prev => ({ ...prev, video_url: url }))}
+                  />
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="trailer_url">
