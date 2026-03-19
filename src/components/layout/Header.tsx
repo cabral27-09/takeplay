@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Search, Menu, X, LogIn, LogOut, User, Crown, Sparkles, Film, CheckCircle, ChevronDown } from "lucide-react";
+import { Search, Menu, X, LogIn, LogOut, User, Crown, Sparkles, Film, CheckCircle, ChevronDown, Upload, Tv } from "lucide-react";
 import logoManivela from "@/assets/logo-manivela.png";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -294,6 +294,19 @@ export const Header = () => {
                       )}
                       {roles.includes("admin") && (
                         <>
+                          <DropdownMenuItem asChild>
+                            <Link to="/admin/series/new" className="cursor-pointer">
+                              <Tv className="mr-2 h-4 w-4" />
+                              Criar Série
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link to="/admin/upload" className="cursor-pointer">
+                              <Upload className="mr-2 h-4 w-4" />
+                              Subir Vídeos
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem asChild>
                             <Link to="/admin/approval" className="cursor-pointer">
                               <CheckCircle className="mr-2 h-4 w-4" />
