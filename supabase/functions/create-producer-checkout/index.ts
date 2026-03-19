@@ -71,7 +71,6 @@ serve(async (req) => {
         },
         payment_methods: {
           excluded_payment_types: [],
-          installments: 1,
         },
         back_urls: {
           success: `${origin}/producer/pricing?success=true`,
