@@ -783,7 +783,7 @@ export default function MovieForm() {
                 ) : (
                   <>
                     <Save className="h-4 w-4 mr-2" />
-                    {isEditing ? 'Salvar Alterações' : 'Criar Filme'}
+                    {isEditing ? 'Salvar Alterações' : isCreatingSeriesParent ? 'Criar Série' : isAddingEpisode ? 'Adicionar Episódio' : formData.content_type === 'espetaculo' ? 'Criar Espetáculo' : 'Criar Filme'}
                   </>
                 )}
               </Button>
