@@ -531,19 +531,19 @@ export default function MovieForm() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="duration">Duração (min)</Label>
-                  <Input
-                    id="duration"
-                    type="number"
-                    min={1}
-                    max={600}
-                    value={formData.duration}
-                    onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
-                    disabled={isExistingSeriesSelected}
-                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
-                  />
-                </div>
+                {!isAddingEpisode && (
+                  <div className="space-y-2">
+                    <Label htmlFor="duration">Duração (min)</Label>
+                    <Input
+                      id="duration"
+                      type="number"
+                      min={1}
+                      max={600}
+                      value={formData.duration}
+                      onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="age_rating">Classificação Etária</Label>
