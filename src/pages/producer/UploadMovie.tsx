@@ -48,7 +48,7 @@ export default function ProducerUploadMovie() {
   const { purchaseInfo, recordUpload } = useProducerPurchase();
   const { toast } = useToast();
 
-  // Series mode: 'new' = create new series, 'existing' = add episode to existing series
+  // Series mode: 'new' = create new series parent, 'existing' = add episode to existing series
   const [seriesMode, setSeriesMode] = useState<'new' | 'existing'>('new');
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
 
@@ -58,7 +58,7 @@ export default function ProducerUploadMovie() {
     year: new Date().getFullYear(),
     duration: 90,
     rating: 0,
-    status: 'pending_review', // Producers always submit as pending_review
+    status: 'pending_review',
     featured: false,
     min_tier: 'free',
     thumbnail_url: '',
@@ -78,16 +78,22 @@ export default function ProducerUploadMovie() {
     series_id: null,
   });
 
-  // Fetch genres based on content type - must be after formData declaration
+  // Episode-specific fields (only used when adding episode to existing series)
+  const [episodeTitle, setEpisodeTitle] = useState('');
+  const [episodeDuration, setEpisodeDuration] = useState(30);
+  const [episodeThumbnail, setEpisodeThumbnail] = useState('');
+
   const { data: genres, isLoading: genresLoading } = useGenresByContentType(formData.content_type);
-  
-  // Fetch producer's series list for the dropdown
   const { data: producerSeries, isLoading: producerSeriesLoading } = useProducerSeriesList(profile?.full_name);
-  
-  // Fetch selected series data for auto-fill
   const { data: selectedSeriesData, isLoading: seriesParentLoading } = useSeriesParent(
     seriesMode === 'existing' ? selectedSeriesId || undefined : undefined
   );
+
+  // Determine if we're in "create series parent" mode (no video needed)
+  const isCreatingSeriesParent = formData.content_type === 'serie' && seriesMode === 'new' && !isEditing;
+  // Determine if we're adding an episode to existing series
+  const isAddingEpisode = formData.content_type === 'serie' && seriesMode === 'existing' && !isEditing;
+  const isExistingSeriesSelected = isAddingEpisode && !!selectedSeriesData;
 
   // Set producer name from profile
   useEffect(() => {
@@ -96,49 +102,26 @@ export default function ProducerUploadMovie() {
     }
   }, [profile, isEditing]);
 
-  // Auto-fill form when selecting an existing series - inherit ALL fields from parent
+  // Auto-fill form when selecting an existing series
   useEffect(() => {
-    console.log('Auto-fill effect triggered:', { 
-      selectedSeriesData, 
-      seriesMode, 
-      selectedSeriesId,
-      hasData: !!selectedSeriesData 
-    });
-    
     if (selectedSeriesData && seriesMode === 'existing') {
-      console.log('Auto-filling form with series data:', selectedSeriesData);
       setFormData(prev => ({
         ...prev,
-        // Tipo de conteúdo (sempre série quando vem da série pai)
         content_type: selectedSeriesData.content_type || 'serie',
-        
-        // Identificação
         series_id: selectedSeriesData.id,
         title: selectedSeriesData.title,
-        
-        // Detalhes
         synopsis: selectedSeriesData.synopsis || '',
         year: selectedSeriesData.year || new Date().getFullYear(),
         duration: selectedSeriesData.duration || 90,
         rating: selectedSeriesData.rating || 0,
-        
-        // Classificação
         age_rating: selectedSeriesData.age_rating || 'L',
         language: selectedSeriesData.language || 'portugues',
-        
-        // Mídia
         thumbnail_url: selectedSeriesData.thumbnail_url || '',
         backdrop_url: selectedSeriesData.backdrop_url || '',
         trailer_url: selectedSeriesData.trailer_url || '',
-        
-        // Gêneros - herda diretamente da série pai
         genre_ids: selectedSeriesData.genres?.map(g => g.id) || [],
-        
-        // Estrutura da série
         total_seasons: selectedSeriesData.total_seasons || null,
         total_episodes: selectedSeriesData.total_episodes || null,
-        
-        // Tier e produtor
         min_tier: selectedSeriesData.min_tier || 'free',
         producer_type: selectedSeriesData.producer_type || 'individual',
         producer_name: selectedSeriesData.producer_name || prev.producer_name,
@@ -150,24 +133,22 @@ export default function ProducerUploadMovie() {
   useEffect(() => {
     if (seriesMode === 'new') {
       setSelectedSeriesId(null);
-      // Only reset series_id, keep other fields
       setFormData(prev => ({ ...prev, series_id: null }));
+      setEpisodeTitle('');
+      setEpisodeDuration(30);
+      setEpisodeThumbnail('');
     }
   }, [seriesMode]);
+
+  // Populate form when editing
   useEffect(() => {
     if (movie && isEditing) {
-      // Only allow editing if it's the producer's movie and in allowed status
       const allowedStatuses: MovieStatus[] = ['draft', 'pending_review', 'rejected'];
       if (!allowedStatuses.includes(movie.status)) {
-        toast({
-          title: 'Acesso negado',
-          description: 'Este filme não pode mais ser editado.',
-          variant: 'destructive',
-        });
+        toast({ title: 'Acesso negado', description: 'Este conteúdo não pode mais ser editado.', variant: 'destructive' });
         navigate('/producer/movies');
         return;
       }
-
       setFormData({
         title: movie.title,
         synopsis: movie.synopsis || '',
@@ -204,129 +185,141 @@ export default function ProducerUploadMovie() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.title.trim()) {
-      toast({
-        title: 'Erro de validação',
-        description: 'O título é obrigatório.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!formData.video_url) {
-      toast({
-        title: 'Erro de validação',
-        description: 'O vídeo é obrigatório.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // Validate series-specific fields
-    if (formData.content_type === 'serie') {
+    // Validation for creating series parent
+    if (isCreatingSeriesParent) {
+      if (!formData.title.trim()) {
+        toast({ title: 'Erro de validação', description: 'O título da série é obrigatório.', variant: 'destructive' });
+        return;
+      }
       if (!formData.total_seasons || formData.total_seasons < 1) {
-        toast({
-          title: 'Erro de validação',
-          description: 'Informe quantas temporadas tem a série.',
-          variant: 'destructive',
-        });
+        toast({ title: 'Erro de validação', description: 'Informe quantas temporadas tem a série.', variant: 'destructive' });
+        return;
+      }
+    }
+    // Validation for adding episode
+    else if (isAddingEpisode) {
+      if (!episodeTitle.trim()) {
+        toast({ title: 'Erro de validação', description: 'O título do episódio é obrigatório.', variant: 'destructive' });
+        return;
+      }
+      if (!formData.video_url) {
+        toast({ title: 'Erro de validação', description: 'O vídeo do episódio é obrigatório.', variant: 'destructive' });
         return;
       }
       if (!formData.season_number || formData.season_number < 1) {
-        toast({
-          title: 'Erro de validação',
-          description: 'Informe qual temporada é este episódio.',
-          variant: 'destructive',
-        });
+        toast({ title: 'Erro de validação', description: 'Informe qual temporada é este episódio.', variant: 'destructive' });
         return;
       }
       if (!formData.current_episode || formData.current_episode < 1) {
-        toast({
-          title: 'Erro de validação',
-          description: 'Informe qual é o número do episódio.',
-          variant: 'destructive',
-        });
+        toast({ title: 'Erro de validação', description: 'Informe o número do episódio.', variant: 'destructive' });
+        return;
+      }
+    }
+    // Validation for filme/espetaculo
+    else if (!isEditing) {
+      if (!formData.title.trim()) {
+        toast({ title: 'Erro de validação', description: 'O título é obrigatório.', variant: 'destructive' });
+        return;
+      }
+      if (!formData.video_url) {
+        toast({ title: 'Erro de validação', description: 'O vídeo é obrigatório.', variant: 'destructive' });
+        return;
+      }
+    }
+    // Editing validation
+    else {
+      if (!formData.title.trim()) {
+        toast({ title: 'Erro de validação', description: 'O título é obrigatório.', variant: 'destructive' });
         return;
       }
     }
 
     try {
-      // Always set status to pending_review when producer submits
-      const submitData: MovieFormData = {
-        ...formData,
-        status: 'pending_review',
-        producer_name: profile?.full_name || formData.producer_name,
-      };
-
-      if (isEditing && id) {
-        await updateMovie.mutateAsync({ id, formData: submitData });
-        toast({
-          title: 'Filme atualizado',
-          description: 'Seu filme foi enviado para avaliação.',
-        });
-      } else {
-        // Create movie first
+      if (isCreatingSeriesParent) {
+        // Create series parent record (no video)
+        const submitData: MovieFormData = {
+          ...formData,
+          status: 'pending_review',
+          producer_name: profile?.full_name || formData.producer_name,
+          video_url: '', // No video for series parent
+          series_id: null,
+        };
         const newMovie = await createMovie.mutateAsync(submitData);
-        
-        // Record the upload to decrement quota
         if (newMovie?.id) {
           await recordUpload(newMovie.id);
         }
-        
-        toast({
-          title: 'Filme enviado!',
-          description: 'Seu filme foi enviado para avaliação. Você receberá uma notificação quando for aprovado.',
-        });
+        toast({ title: 'Série criada!', description: 'A série foi criada. Agora você pode adicionar episódios a ela.' });
+      } else if (isAddingEpisode) {
+        // Create episode record linked to series parent
+        const submitData: MovieFormData = {
+          ...formData,
+          title: episodeTitle, // Episode has its own title
+          duration: episodeDuration,
+          thumbnail_url: episodeThumbnail || formData.thumbnail_url, // Episode can have its own cover
+          status: 'pending_review',
+          producer_name: profile?.full_name || formData.producer_name,
+        };
+        const newMovie = await createMovie.mutateAsync(submitData);
+        if (newMovie?.id) {
+          await recordUpload(newMovie.id);
+        }
+        toast({ title: 'Episódio enviado!', description: 'O episódio foi enviado para avaliação.' });
+      } else if (isEditing && id) {
+        const submitData: MovieFormData = {
+          ...formData,
+          status: 'pending_review',
+          producer_name: profile?.full_name || formData.producer_name,
+        };
+        await updateMovie.mutateAsync({ id, formData: submitData });
+        toast({ title: 'Conteúdo atualizado', description: 'Enviado para avaliação.' });
+      } else {
+        // Filme or Espetáculo
+        const submitData: MovieFormData = {
+          ...formData,
+          status: 'pending_review',
+          producer_name: profile?.full_name || formData.producer_name,
+        };
+        const newMovie = await createMovie.mutateAsync(submitData);
+        if (newMovie?.id) {
+          await recordUpload(newMovie.id);
+        }
+        toast({ title: 'Conteúdo enviado!', description: 'Enviado para avaliação.' });
       }
       navigate('/producer/movies');
     } catch (error) {
-      console.error('Error saving movie:', error);
-      toast({
-        title: 'Erro ao salvar',
-        description: 'Não foi possível salvar o filme. Tente novamente.',
-        variant: 'destructive',
-      });
+      console.error('Error saving:', error);
+      toast({ title: 'Erro ao salvar', description: 'Não foi possível salvar. Tente novamente.', variant: 'destructive' });
     }
   };
 
   const handleSaveDraft = async () => {
-    if (!formData.title.trim()) {
-      toast({
-        title: 'Erro de validação',
-        description: 'O título é obrigatório para salvar como rascunho.',
-        variant: 'destructive',
-      });
+    if (!formData.title.trim() && !episodeTitle.trim()) {
+      toast({ title: 'Erro de validação', description: 'O título é obrigatório para salvar como rascunho.', variant: 'destructive' });
       return;
     }
 
     try {
+      const title = isAddingEpisode ? episodeTitle : formData.title;
       const draftData: MovieFormData = {
         ...formData,
+        title: title,
+        ...(isAddingEpisode ? { duration: episodeDuration, thumbnail_url: episodeThumbnail || formData.thumbnail_url } : {}),
         status: 'draft',
         producer_name: profile?.full_name || formData.producer_name,
+        ...(isCreatingSeriesParent ? { video_url: '' } : {}),
       };
 
       if (isEditing && id) {
         await updateMovie.mutateAsync({ id, formData: draftData });
-        toast({
-          title: 'Rascunho salvo',
-          description: 'Seu rascunho foi salvo com sucesso.',
-        });
+        toast({ title: 'Rascunho salvo' });
       } else {
         await createMovie.mutateAsync(draftData);
-        toast({
-          title: 'Rascunho criado',
-          description: 'Seu rascunho foi salvo. Você pode continuar editando depois.',
-        });
+        toast({ title: 'Rascunho criado' });
       }
       navigate('/producer/movies');
     } catch (error) {
       console.error('Error saving draft:', error);
-      toast({
-        title: 'Erro ao salvar',
-        description: 'Não foi possível salvar o rascunho. Tente novamente.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao salvar', description: 'Não foi possível salvar o rascunho.', variant: 'destructive' });
     }
   };
 
@@ -341,9 +334,6 @@ export default function ProducerUploadMovie() {
 
   const isLoading = authLoading || (isEditing && movieLoading) || genresLoading || producerSeriesLoading;
   const isSaving = createMovie.isPending || updateMovie.isPending;
-  const isExistingSeriesSelected = seriesMode === 'existing' && !!selectedSeriesData;
-
-  // Show current status if editing
   const currentStatus = isEditing && movie ? STATUS_CONFIG[movie.status] : null;
 
   if (isLoading) {
@@ -356,7 +346,16 @@ export default function ProducerUploadMovie() {
     );
   }
 
-  // For new uploads, wrap with UploadGate
+  const getHeaderTitle = () => {
+    if (isEditing) {
+      return `Editar ${formData.content_type === 'serie' ? 'Série/Episódio' : formData.content_type === 'espetaculo' ? 'Espetáculo' : 'Filme'}`;
+    }
+    if (isCreatingSeriesParent) return 'Criar Nova Série';
+    if (isAddingEpisode) return 'Adicionar Episódio';
+    if (formData.content_type === 'espetaculo') return 'Novo Espetáculo';
+    return 'Novo Filme';
+  };
+
   const content = (
     <Layout>
       <div className="container py-8 max-w-4xl">
@@ -375,12 +374,7 @@ export default function ProducerUploadMovie() {
               </Link>
               <div>
                 <div className="flex items-center gap-3">
-                  <h1 className="text-2xl font-bold">
-                    {isEditing 
-                      ? `Editar ${formData.content_type === 'serie' ? 'Série' : formData.content_type === 'espetaculo' ? 'Espetáculo' : 'Filme'}`
-                      : `Enviar ${formData.content_type === 'serie' ? 'Nova Série' : formData.content_type === 'espetaculo' ? 'Novo Espetáculo' : 'Novo Filme'}`
-                    }
-                  </h1>
+                  <h1 className="text-2xl font-bold">{getHeaderTitle()}</h1>
                   {currentStatus && (
                     <Badge variant={currentStatus.variant} className="gap-1">
                       <currentStatus.icon className="h-3 w-3" />
@@ -389,11 +383,14 @@ export default function ProducerUploadMovie() {
                   )}
                 </div>
                 <p className="text-muted-foreground">
-                  Preencha os dados para enviar seu conteúdo para avaliação
+                  {isCreatingSeriesParent
+                    ? 'Cadastre os dados da série. Os episódios serão adicionados depois.'
+                    : isAddingEpisode
+                      ? 'Envie um episódio para uma série existente.'
+                      : 'Preencha os dados para enviar seu conteúdo para avaliação'}
                 </p>
               </div>
             </div>
-            {/* Show remaining uploads for new content */}
             {!isEditing && purchaseInfo.hasActivePurchase && (
               <Badge variant="outline" className="gap-1 text-sm">
                 <Upload className="h-3 w-3" />
@@ -402,40 +399,35 @@ export default function ProducerUploadMovie() {
             )}
           </div>
 
-          {/* Rejection reason if applicable */}
+          {/* Rejection reason */}
           {movie?.status === 'rejected' && (
             <div className="p-4 rounded-lg border border-destructive/50 bg-destructive/10">
               <p className="text-sm text-destructive font-medium">
-                Seu filme foi recusado. Por favor, faça as correções necessárias e envie novamente.
+                Seu conteúdo foi recusado. Faça as correções e envie novamente.
               </p>
             </div>
           )}
 
-          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-8">
             {/* Content Type Selector */}
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold border-b border-border pb-2">
-                Tipo de Conteúdo
-              </h2>
-              
+              <h2 className="text-lg font-semibold border-b border-border pb-2">Tipo de Conteúdo</h2>
               <div className="space-y-2">
                 <Label htmlFor="content_type">Selecione o tipo *</Label>
                 <Select
                   value={formData.content_type}
-                  onValueChange={(value: ContentType) => 
-                    setFormData(prev => ({ 
-                      ...prev, 
+                  onValueChange={(value: ContentType) =>
+                    setFormData(prev => ({
+                      ...prev,
                       content_type: value,
-                      // Reset series fields when changing type
                       total_seasons: value === 'serie' ? prev.total_seasons : null,
                       total_episodes: value === 'serie' ? prev.total_episodes : null,
                       season_number: value === 'serie' ? prev.season_number : null,
                       current_episode: value === 'serie' ? prev.current_episode : null,
-                      // Clear genres when changing type (different categories)
                       genre_ids: [],
                     }))
                   }
+                  disabled={isEditing}
                 >
                   <SelectTrigger className="max-w-md">
                     <SelectValue />
@@ -464,17 +456,15 @@ export default function ProducerUploadMovie() {
               </div>
             </div>
 
-            {/* Series Info - Only shown when content_type is 'serie' */}
-            {formData.content_type === 'serie' && (
+            {/* ===== SÉRIE FLOW ===== */}
+            {formData.content_type === 'serie' && !isEditing && (
               <div className="space-y-4 p-4 rounded-lg border-2 border-primary/30 bg-primary/5">
-                <h2 className="text-lg font-semibold border-b border-border pb-2">
-                  Informações da Série
-                </h2>
-                
-                {/* Series Mode Selection - Only for new content, not editing */}
-                {!isEditing && producerSeries && producerSeries.length > 0 && (
+                <h2 className="text-lg font-semibold border-b border-border pb-2">Fluxo da Série</h2>
+
+                {/* Mode selection */}
+                {producerSeries && producerSeries.length > 0 && (
                   <div className="space-y-4">
-                    <Label>É uma série nova ou já existente?</Label>
+                    <Label>O que deseja fazer?</Label>
                     <RadioGroup
                       value={seriesMode}
                       onValueChange={(value: 'new' | 'existing') => setSeriesMode(value)}
@@ -482,25 +472,51 @@ export default function ProducerUploadMovie() {
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="new" id="series-new" />
-                        <Label htmlFor="series-new" className="cursor-pointer font-normal">
-                          Criar nova série
-                        </Label>
+                        <Label htmlFor="series-new" className="cursor-pointer font-normal">Criar nova série</Label>
                       </div>
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="existing" id="series-existing" />
-                        <Label htmlFor="series-existing" className="cursor-pointer font-normal">
-                          Adicionar episódio a série existente
-                        </Label>
+                        <Label htmlFor="series-existing" className="cursor-pointer font-normal">Adicionar episódio a série existente</Label>
                       </div>
                     </RadioGroup>
                   </div>
                 )}
 
-                {/* Existing Series Selector */}
-                {seriesMode === 'existing' && !isEditing && (
+                {/* ---- NEW SERIES: structure fields ---- */}
+                {seriesMode === 'new' && (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="total_seasons">Quantas temporadas? *</Label>
+                      <Input
+                        id="total_seasons"
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={formData.total_seasons || ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, total_seasons: parseInt(e.target.value) || null }))}
+                        placeholder="Ex: 3"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="total_episodes">Total de episódios (todas temporadas)</Label>
+                      <Input
+                        id="total_episodes"
+                        type="number"
+                        min={1}
+                        max={9999}
+                        value={formData.total_episodes || ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, total_episodes: parseInt(e.target.value) || null }))}
+                        placeholder="Ex: 24"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* ---- EXISTING SERIES: select + episode fields ---- */}
+                {seriesMode === 'existing' && (
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="existing_series">Selecione a série *</Label>
+                      <Label>Selecione a série *</Label>
                       <Select
                         value={selectedSeriesId || ''}
                         onValueChange={(value) => setSelectedSeriesId(value)}
@@ -510,15 +526,13 @@ export default function ProducerUploadMovie() {
                         </SelectTrigger>
                         <SelectContent>
                           {producerSeries?.map((series) => (
-                            <SelectItem key={series.id} value={series.id}>
-                              {series.title}
-                            </SelectItem>
+                            <SelectItem key={series.id} value={series.id}>{series.title}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
 
-                    {/* Show inherited data preview */}
+                    {/* Inherited data preview */}
                     {selectedSeriesData && (
                       <div className="p-4 rounded-lg bg-muted/50 border border-border space-y-2">
                         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -530,12 +544,10 @@ export default function ProducerUploadMovie() {
                             <span className="text-muted-foreground">Gêneros:</span>
                             <div className="flex gap-1 flex-wrap">
                               {selectedSeriesData.genres.map(g => (
-                                <Badge key={g.id} variant="secondary" className="text-xs">
-                                  {g.name}
-                                </Badge>
+                                <Badge key={g.id} variant="secondary" className="text-xs">{g.name}</Badge>
                               ))}
                               {selectedSeriesData.genres.length === 0 && (
-                                <span className="text-muted-foreground italic">Nenhum gênero definido</span>
+                                <span className="text-muted-foreground italic">Nenhum gênero</span>
                               )}
                             </div>
                           </div>
@@ -544,19 +556,9 @@ export default function ProducerUploadMovie() {
                             <span>{selectedSeriesData.age_rating} anos</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-muted-foreground">Idioma:</span>
-                            <span className="capitalize">{selectedSeriesData.language}</span>
+                            <span className="text-muted-foreground">Nível:</span>
+                            <span className="capitalize">{selectedSeriesData.min_tier === 'free' ? 'Grátis' : selectedSeriesData.min_tier}</span>
                           </div>
-                          {selectedSeriesData.thumbnail_url && (
-                            <div className="flex items-start gap-2">
-                              <span className="text-muted-foreground">Thumbnail:</span>
-                              <img 
-                                src={selectedSeriesData.thumbnail_url} 
-                                alt="Thumbnail da série" 
-                                className="h-16 w-auto rounded border"
-                              />
-                            </div>
-                          )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-2">
                           ✓ Esses dados serão usados automaticamente para o episódio
@@ -570,347 +572,307 @@ export default function ProducerUploadMovie() {
                         Carregando dados da série...
                       </div>
                     )}
+
+                    {/* Episode-specific fields */}
+                    {isExistingSeriesSelected && (
+                      <div className="space-y-4 p-4 rounded-lg border border-border bg-card">
+                        <h3 className="text-md font-semibold">Dados do Episódio</h3>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="space-y-2 md:col-span-2">
+                            <Label htmlFor="episode_title">Título do Episódio *</Label>
+                            <Input
+                              id="episode_title"
+                              value={episodeTitle}
+                              onChange={(e) => setEpisodeTitle(e.target.value)}
+                              placeholder="Ex: O Começo de Tudo"
+                              required
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="season_number">Temporada *</Label>
+                            <Input
+                              id="season_number"
+                              type="number"
+                              min={1}
+                              max={formData.total_seasons || 100}
+                              value={formData.season_number || ''}
+                              onChange={(e) => setFormData(prev => ({ ...prev, season_number: parseInt(e.target.value) || null }))}
+                              placeholder="Ex: 1"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="current_episode">Episódio nº *</Label>
+                            <Input
+                              id="current_episode"
+                              type="number"
+                              min={1}
+                              max={999}
+                              value={formData.current_episode || ''}
+                              onChange={(e) => setFormData(prev => ({ ...prev, current_episode: parseInt(e.target.value) || null }))}
+                              placeholder="Ex: 1"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="episode_duration">Duração (minutos) *</Label>
+                            <Input
+                              id="episode_duration"
+                              type="number"
+                              min={1}
+                              max={600}
+                              value={episodeDuration}
+                              onChange={(e) => setEpisodeDuration(parseInt(e.target.value) || 0)}
+                              placeholder="Ex: 45"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Capa do Episódio (opcional — usa a da série se vazio)</Label>
+                          <ImageUploader
+                            value={episodeThumbnail}
+                            onChange={(url) => setEpisodeThumbnail(url)}
+                            aspectRatio="thumbnail"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Vídeo do Episódio *</Label>
+                          <VideoUploader
+                            value={formData.video_url}
+                            onChange={(url) => setFormData(prev => ({ ...prev, video_url: url }))}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
-                
-                {/* Episode fields - Always shown for series */}
-                <div className="grid gap-4 md:grid-cols-2">
-                  {/* Only show total_seasons for new series */}
-                  {(seriesMode === 'new' || isEditing) && (
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="total_seasons">Quantas temporadas tem a série? *</Label>
-                      <Input
-                        id="total_seasons"
-                        type="number"
-                        min={1}
-                        max={100}
-                        value={formData.total_seasons || ''}
-                        onChange={(e) => setFormData(prev => ({ ...prev, total_seasons: parseInt(e.target.value) || null }))}
-                        placeholder="Ex: 3"
-                        disabled={isExistingSeriesSelected}
-                      />
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label htmlFor="season_number">Qual temporada é este vídeo? *</Label>
-                    <Input
-                      id="season_number"
-                      type="number"
-                      min={1}
-                      max={formData.total_seasons || 100}
-                      value={formData.season_number || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, season_number: parseInt(e.target.value) || null }))}
-                      placeholder="Ex: 1"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="current_episode">Qual episódio? *</Label>
-                    <Input
-                      id="current_episode"
-                      type="number"
-                      min={1}
-                      max={999}
-                      value={formData.current_episode || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, current_episode: parseInt(e.target.value) || null }))}
-                      placeholder="Ex: 1"
-                    />
-                  </div>
-
-                  {/* Only show total_episodes for new series */}
-                  {(seriesMode === 'new' || isEditing) && (
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="total_episodes">Total de episódios da série (opcional)</Label>
-                      <Input
-                        id="total_episodes"
-                        type="number"
-                        min={1}
-                        max={9999}
-                        value={formData.total_episodes || ''}
-                        onChange={(e) => setFormData(prev => ({ ...prev, total_episodes: parseInt(e.target.value) || null }))}
-                        placeholder="Ex: 24"
-                        disabled={isExistingSeriesSelected}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Informe o total de episódios considerando todas as temporadas
-                      </p>
-                    </div>
-                  )}
-                </div>
               </div>
             )}
 
-            {/* Basic Info - Show as read-only when existing series selected */}
-            <div className="space-y-4">
-              <h2 className="text-lg font-semibold border-b border-border pb-2">
-                {isExistingSeriesSelected ? 'Dados Herdados da Série (Somente Leitura)' : 'Informações Básicas'}
-              </h2>
-              
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="title">
-                    {formData.content_type === 'serie' ? 'Nome da Série *' : 'Título *'}
-                  </Label>
-                  <Input
-                    id="title"
-                    value={formData.title}
-                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder={formData.content_type === 'serie' ? 'Nome da série' : formData.content_type === 'espetaculo' ? 'Nome do espetáculo' : 'Nome do filme'}
-                    required
-                    disabled={isExistingSeriesSelected}
-                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
-                  />
-                </div>
+            {/* ===== BASIC INFO (for non-episode flows) ===== */}
+            {!isAddingEpisode && (
+              <>
+                <div className="space-y-4">
+                  <h2 className="text-lg font-semibold border-b border-border pb-2">Informações Básicas</h2>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="title">
+                        {formData.content_type === 'serie' ? 'Nome da Série *' : 'Título *'}
+                      </Label>
+                      <Input
+                        id="title"
+                        value={formData.title}
+                        onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                        placeholder={formData.content_type === 'serie' ? 'Nome da série' : formData.content_type === 'espetaculo' ? 'Nome do espetáculo' : 'Nome do filme'}
+                        required
+                      />
+                    </div>
 
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="synopsis">Sinopse *</Label>
-                  <Textarea
-                    id="synopsis"
-                    value={formData.synopsis}
-                    onChange={(e) => setFormData(prev => ({ ...prev, synopsis: e.target.value }))}
-                    placeholder="Descrição do filme..."
-                    rows={4}
-                    disabled={isExistingSeriesSelected}
-                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
-                  />
-                </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="synopsis">Sinopse *</Label>
+                      <Textarea
+                        id="synopsis"
+                        value={formData.synopsis}
+                        onChange={(e) => setFormData(prev => ({ ...prev, synopsis: e.target.value }))}
+                        placeholder="Descrição do conteúdo..."
+                        rows={4}
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="year">Ano de Produção</Label>
-                  <Input
-                    id="year"
-                    type="number"
-                    min={1900}
-                    max={2100}
-                    value={formData.year}
-                    onChange={(e) => setFormData(prev => ({ ...prev, year: parseInt(e.target.value) || 0 }))}
-                    disabled={isExistingSeriesSelected}
-                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
-                  />
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="year">Ano de Produção</Label>
+                      <Input
+                        id="year"
+                        type="number"
+                        min={1900}
+                        max={2100}
+                        value={formData.year}
+                        onChange={(e) => setFormData(prev => ({ ...prev, year: parseInt(e.target.value) || 0 }))}
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="duration">Duração (minutos)</Label>
-                  <Input
-                    id="duration"
-                    type="number"
-                    min={1}
-                    max={600}
-                    value={formData.duration}
-                    onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
-                    disabled={isExistingSeriesSelected}
-                    className={isExistingSeriesSelected ? 'bg-muted' : ''}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="age_rating">Classificação Etária *</Label>
-                  <Select
-                    value={formData.age_rating}
-                    onValueChange={(value: AgeRating) => 
-                      setFormData(prev => ({ ...prev, age_rating: value }))
-                    }
-                    disabled={isExistingSeriesSelected}
-                  >
-                    <SelectTrigger className={isExistingSeriesSelected ? 'bg-muted' : ''}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="L">L - Livre para todos</SelectItem>
-                      <SelectItem value="10">10 - Não recomendado para menores de 10 anos</SelectItem>
-                      <SelectItem value="12">12 - Não recomendado para menores de 12 anos</SelectItem>
-                      <SelectItem value="14">14 - Não recomendado para menores de 14 anos</SelectItem>
-                      <SelectItem value="16">16 - Não recomendado para menores de 16 anos</SelectItem>
-                      <SelectItem value="18">18 - Não recomendado para menores de 18 anos</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="language">Idioma do Áudio *</Label>
-                  <Select
-                    value={formData.language}
-                    onValueChange={(value: ContentLanguage) => 
-                      setFormData(prev => ({ ...prev, language: value }))
-                    }
-                    disabled={isExistingSeriesSelected}
-                  >
-                    <SelectTrigger className={isExistingSeriesSelected ? 'bg-muted' : ''}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="portugues">Português</SelectItem>
-                      <SelectItem value="ingles">Inglês</SelectItem>
-                      <SelectItem value="espanhol">Espanhol</SelectItem>
-                      <SelectItem value="outro">Outro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* Genres - Show as read-only when existing series selected */}
-            <div className="space-y-4">
-              <h2 className="text-lg font-semibold border-b border-border pb-2">
-                Gêneros {isExistingSeriesSelected && '(Herdados)'}
-              </h2>
-              
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {genres?.map((genre) => (
-                  <label
-                    key={genre.id}
-                    className={`flex items-center gap-2 ${isExistingSeriesSelected ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
-                  >
-                    <Checkbox
-                      checked={formData.genre_ids.includes(genre.id)}
-                      onCheckedChange={() => !isExistingSeriesSelected && handleGenreToggle(genre.id)}
-                      disabled={isExistingSeriesSelected}
-                    />
-                    <span className="text-sm">{genre.name}</span>
-                  </label>
-                ))}
-              </div>
-              {isExistingSeriesSelected && formData.genre_ids.length === 0 && (
-                <p className="text-sm text-muted-foreground italic">
-                  Nenhum gênero definido na série pai
-                </p>
-              )}
-            </div>
-
-            {/* Nível de Acesso */}
-            <div className="space-y-4">
-              <h2 className="text-lg font-semibold border-b border-border pb-2">
-                Quem pode assistir? {isExistingSeriesSelected && '(Herdado)'}
-              </h2>
-              <div className="max-w-xs">
-                <Select
-                  value={formData.min_tier}
-                  onValueChange={(value) => !isExistingSeriesSelected && setFormData(prev => ({ ...prev, min_tier: value as 'free' | 'standard' | 'premium' }))}
-                  disabled={isExistingSeriesSelected}
-                >
-                  <SelectTrigger className={isExistingSeriesSelected ? 'bg-muted' : ''}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="free">Grátis</SelectItem>
-                    <SelectItem value="standard">Standard</SelectItem>
-                    <SelectItem value="premium">Premium</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Define qual plano de assinatura é necessário para assistir este conteúdo.
-                </p>
-              </div>
-            </div>
-
-
-            <div className="space-y-4">
-              <h2 className="text-lg font-semibold border-b border-border pb-2">
-                {isExistingSeriesSelected ? 'Mídia (Imagens Herdadas + Vídeo do Episódio)' : 'Mídia'}
-              </h2>
-              
-              {/* Thumbnail and Backdrop - Show as preview when existing series selected */}
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Capa {formData.content_type === 'serie' ? 'da Série' : 'do Filme'} (2:3) {!isExistingSeriesSelected && '*'}</Label>
-                  {isExistingSeriesSelected ? (
-                    formData.thumbnail_url ? (
-                      <div className="relative">
-                        <img 
-                          src={formData.thumbnail_url} 
-                          alt="Thumbnail da série" 
-                          className="h-48 w-auto rounded-lg border border-border object-cover"
+                    {/* Duration - only for filme/espetaculo, not series parent */}
+                    {!isCreatingSeriesParent && (
+                      <div className="space-y-2">
+                        <Label htmlFor="duration">Duração (minutos)</Label>
+                        <Input
+                          id="duration"
+                          type="number"
+                          min={1}
+                          max={600}
+                          value={formData.duration}
+                          onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
                         />
-                        <Badge variant="secondary" className="absolute top-2 right-2 text-xs">
-                          Herdado
-                        </Badge>
                       </div>
-                    ) : (
-                      <div className="h-48 rounded-lg border border-dashed border-border flex items-center justify-center text-muted-foreground text-sm">
-                        Sem imagem definida
-                      </div>
-                    )
-                  ) : (
-                    <ImageUploader
-                      value={formData.thumbnail_url}
-                      onChange={(url) => setFormData(prev => ({ ...prev, thumbnail_url: url }))}
-                      aspectRatio="thumbnail"
-                    />
-                  )}
+                    )}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="age_rating">Classificação Etária *</Label>
+                      <Select
+                        value={formData.age_rating}
+                        onValueChange={(value: AgeRating) => setFormData(prev => ({ ...prev, age_rating: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="L">L - Livre para todos</SelectItem>
+                          <SelectItem value="10">10 anos</SelectItem>
+                          <SelectItem value="12">12 anos</SelectItem>
+                          <SelectItem value="14">14 anos</SelectItem>
+                          <SelectItem value="16">16 anos</SelectItem>
+                          <SelectItem value="18">18 anos</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="language">Idioma do Áudio *</Label>
+                      <Select
+                        value={formData.language}
+                        onValueChange={(value: ContentLanguage) => setFormData(prev => ({ ...prev, language: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="portugues">Português</SelectItem>
+                          <SelectItem value="ingles">Inglês</SelectItem>
+                          <SelectItem value="espanhol">Espanhol</SelectItem>
+                          <SelectItem value="outro">Outro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Banner (16:9)</Label>
-                  {isExistingSeriesSelected ? (
-                    formData.backdrop_url ? (
-                      <div className="relative">
-                        <img 
-                          src={formData.backdrop_url} 
-                          alt="Banner da série" 
-                          className="h-48 w-full rounded-lg border border-border object-cover"
+                {/* Genres */}
+                <div className="space-y-4">
+                  <h2 className="text-lg font-semibold border-b border-border pb-2">Gêneros</h2>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {genres?.map((genre) => (
+                      <label key={genre.id} className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox
+                          checked={formData.genre_ids.includes(genre.id)}
+                          onCheckedChange={() => handleGenreToggle(genre.id)}
                         />
-                        <Badge variant="secondary" className="absolute top-2 right-2 text-xs">
-                          Herdado
-                        </Badge>
-                      </div>
-                    ) : (
-                      <div className="h-48 rounded-lg border border-dashed border-border flex items-center justify-center text-muted-foreground text-sm">
-                        Sem banner definido
-                      </div>
-                    )
-                  ) : (
-                    <ImageUploader
-                      value={formData.backdrop_url}
-                      onChange={(url) => setFormData(prev => ({ ...prev, backdrop_url: url }))}
-                      aspectRatio="backdrop"
-                    />
-                  )}
+                        <span className="text-sm">{genre.name}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label>
-                  {formData.content_type === 'serie' 
-                    ? 'Vídeo do Episódio *' 
-                    : formData.content_type === 'espetaculo' 
-                      ? 'Vídeo do Espetáculo *' 
-                      : 'Vídeo do Filme *'}
-                </Label>
-                <VideoUploader
-                  value={formData.video_url}
-                  onChange={(url) => setFormData(prev => ({ ...prev, video_url: url }))}
-                />
-              </div>
+                {/* Access Level */}
+                <div className="space-y-4">
+                  <h2 className="text-lg font-semibold border-b border-border pb-2">Quem pode assistir?</h2>
+                  <div className="max-w-xs">
+                    <Select
+                      value={formData.min_tier}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, min_tier: value as 'free' | 'standard' | 'premium' }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="free">Grátis</SelectItem>
+                        <SelectItem value="standard">Standard</SelectItem>
+                        <SelectItem value="premium">Premium</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Define qual plano é necessário para assistir este conteúdo.
+                    </p>
+                  </div>
+                </div>
 
-              {/* Trailer - Show as read-only when existing series selected */}
-              <div className="space-y-2">
-                <Label htmlFor="trailer_url">URL do Trailer (YouTube Embed)</Label>
-                <Input
-                  id="trailer_url"
-                  value={formData.trailer_url}
-                  onChange={(e) => setFormData(prev => ({ ...prev, trailer_url: e.target.value }))}
-                  placeholder="https://www.youtube.com/embed/..."
-                  disabled={isExistingSeriesSelected}
-                  className={isExistingSeriesSelected ? 'bg-muted' : ''}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {isExistingSeriesSelected 
-                    ? 'Trailer herdado da série' 
-                    : 'Opcional: adicione um link do YouTube para o trailer do filme'}
+                {/* Media */}
+                <div className="space-y-4">
+                  <h2 className="text-lg font-semibold border-b border-border pb-2">Mídia</h2>
+
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Capa (2:3) *</Label>
+                      <ImageUploader
+                        value={formData.thumbnail_url}
+                        onChange={(url) => setFormData(prev => ({ ...prev, thumbnail_url: url }))}
+                        aspectRatio="thumbnail"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Banner (16:9)</Label>
+                      <ImageUploader
+                        value={formData.backdrop_url}
+                        onChange={(url) => setFormData(prev => ({ ...prev, backdrop_url: url }))}
+                        aspectRatio="backdrop"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Video - NOT shown when creating series parent */}
+                  {!isCreatingSeriesParent && (
+                    <div className="space-y-2">
+                      <Label>
+                        {formData.content_type === 'espetaculo' ? 'Vídeo do Espetáculo *' : 'Vídeo do Filme *'}
+                      </Label>
+                      <VideoUploader
+                        value={formData.video_url}
+                        onChange={(url) => setFormData(prev => ({ ...prev, video_url: url }))}
+                      />
+                    </div>
+                  )}
+
+                  {isCreatingSeriesParent && (
+                    <div className="p-4 rounded-lg bg-muted/50 border border-border">
+                      <div className="flex items-start gap-3">
+                        <Info className="h-5 w-5 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="font-medium">Sem vídeo nesta etapa</p>
+                          <p className="text-sm text-muted-foreground">
+                            Ao criar a série, você cadastra apenas os dados gerais. Os vídeos serão adicionados depois como episódios individuais.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="trailer_url">URL do Trailer (YouTube Embed)</Label>
+                    <Input
+                      id="trailer_url"
+                      value={formData.trailer_url}
+                      onChange={(e) => setFormData(prev => ({ ...prev, trailer_url: e.target.value }))}
+                      placeholder="https://www.youtube.com/embed/..."
+                    />
+                    <p className="text-xs text-muted-foreground">Opcional: link do YouTube para o trailer</p>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ===== EDITING SERIES EPISODE (existing record) ===== */}
+            {isEditing && formData.series_id && (
+              <div className="p-4 rounded-lg bg-muted/50 border border-border">
+                <p className="text-sm text-muted-foreground">
+                  <Info className="h-4 w-4 inline mr-1" />
+                  Este é um episódio vinculado a uma série. Alguns dados são herdados.
                 </p>
               </div>
-            </div>
+            )}
 
-            {/* Info Box */}
+            {/* Approval Info */}
             <div className="p-4 rounded-lg bg-muted/50 border border-border">
               <div className="flex items-start gap-3">
                 <Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
                 <div>
                   <p className="font-medium">Processo de Aprovação</p>
                   <p className="text-sm text-muted-foreground">
-                    Após enviar seu filme, ele será revisado pela nossa equipe. 
-                    Você receberá uma notificação quando o status for atualizado.
+                    {isCreatingSeriesParent
+                      ? 'Após criar a série, ela será revisada. Você poderá adicionar episódios a ela.'
+                      : 'Após enviar, seu conteúdo será revisado pela equipe.'}
                   </p>
                 </div>
               </div>
@@ -922,27 +884,26 @@ export default function ProducerUploadMovie() {
                 {isSaving ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Enviando...
+                    Salvando...
                   </>
                 ) : (
                   <>
                     <Save className="h-4 w-4 mr-2" />
-                    {isEditing ? 'Reenviar para Avaliação' : 'Enviar para Avaliação'}
+                    {isEditing
+                      ? 'Reenviar para Avaliação'
+                      : isCreatingSeriesParent
+                        ? 'Criar Série'
+                        : isAddingEpisode
+                          ? 'Enviar Episódio'
+                          : 'Enviar para Avaliação'}
                   </>
                 )}
               </Button>
-              <Button 
-                type="button" 
-                variant="secondary"
-                disabled={isSaving}
-                onClick={handleSaveDraft}
-              >
+              <Button type="button" variant="secondary" disabled={isSaving} onClick={handleSaveDraft}>
                 Salvar como Rascunho
               </Button>
               <Link to="/producer/movies">
-                <Button type="button" variant="outline">
-                  Cancelar
-                </Button>
+                <Button type="button" variant="outline">Cancelar</Button>
               </Link>
             </div>
           </form>
@@ -951,10 +912,6 @@ export default function ProducerUploadMovie() {
     </Layout>
   );
 
-  // For editing, show content directly; for new uploads, wrap with UploadGate
-  if (isEditing) {
-    return content;
-  }
-
+  if (isEditing) return content;
   return <UploadGate>{content}</UploadGate>;
 }
