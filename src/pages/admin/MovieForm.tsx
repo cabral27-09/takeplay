@@ -64,6 +64,12 @@ export default function MovieForm() {
     series_id: null,
   });
 
+  // Episode-specific state (used when adding episode to existing series)
+  const [episodeTitle, setEpisodeTitle] = useState('');
+  const [episodeSynopsis, setEpisodeSynopsis] = useState('');
+  const [episodeDuration, setEpisodeDuration] = useState<number>(30);
+  const [episodeThumbnail, setEpisodeThumbnail] = useState('');
+
   // Fetch genres based on content type - must be after formData declaration
   const { data: genres, isLoading: genresLoading } = useGenresByContentType(formData.content_type);
   
@@ -77,6 +83,12 @@ export default function MovieForm() {
   
   // Check if an existing series is selected
   const isExistingSeriesSelected = !!formData.series_id && !!selectedSeriesData;
+  
+  // Determine if we're creating a series parent (no video needed)
+  const isCreatingSeriesParent = formData.content_type === 'serie' && !formData.series_id && !isEditing;
+  // Determine if we're adding an episode to an existing series
+  const isAddingEpisode = formData.content_type === 'serie' && !!formData.series_id;
+
 
   // Load movie data for editing
   useEffect(() => {
@@ -157,7 +169,25 @@ export default function MovieForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.title.trim()) {
+    // When adding episode, validate episode-specific fields
+    if (isAddingEpisode && !isEditing) {
+      if (!episodeTitle.trim()) {
+        toast({
+          title: 'Erro de validação',
+          description: 'O título do episódio é obrigatório.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (!formData.video_url) {
+        toast({
+          title: 'Erro de validação',
+          description: 'O vídeo do episódio é obrigatório.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    } else if (!formData.title.trim()) {
       toast({
         title: 'Erro de validação',
         description: 'O título é obrigatório.',
@@ -166,26 +196,46 @@ export default function MovieForm() {
       return;
     }
 
+    // Build submission data
+    let submitData = { ...formData };
+    
+    // Series parent: no video needed
+    if (isCreatingSeriesParent) {
+      submitData.video_url = '';
+    }
+    
+    // Episode: use episode-specific fields
+    if (isAddingEpisode && !isEditing) {
+      submitData.title = episodeTitle;
+      submitData.synopsis = episodeSynopsis;
+      submitData.duration = episodeDuration;
+      submitData.thumbnail_url = episodeThumbnail || formData.thumbnail_url;
+    }
+
+    const contentLabel = isCreatingSeriesParent ? 'Série' : isAddingEpisode ? 'Episódio' : formData.content_type === 'espetaculo' ? 'Espetáculo' : 'Filme';
+
     try {
       if (isEditing && id) {
-        await updateMovie.mutateAsync({ id, formData });
+        await updateMovie.mutateAsync({ id, formData: submitData });
         toast({
-          title: 'Filme atualizado',
+          title: `${contentLabel} atualizado`,
           description: 'As alterações foram salvas com sucesso.',
         });
       } else {
-        await createMovie.mutateAsync(formData);
+        await createMovie.mutateAsync(submitData);
         toast({
-          title: 'Filme criado',
-          description: 'O filme foi cadastrado com sucesso.',
+          title: `${contentLabel} criado`,
+          description: isCreatingSeriesParent 
+            ? 'A série foi criada. Agora você pode adicionar episódios.'
+            : `O ${contentLabel.toLowerCase()} foi cadastrado com sucesso.`,
         });
       }
       navigate('/admin/movies');
     } catch (error) {
-      console.error('Error saving movie:', error);
+      console.error('Error saving:', error);
       toast({
         title: 'Erro ao salvar',
-        description: 'Não foi possível salvar o filme. Tente novamente.',
+        description: `Não foi possível salvar. Tente novamente.`,
         variant: 'destructive',
       });
     }
@@ -317,30 +367,78 @@ export default function MovieForm() {
 
                 {/* Episode fields - only show when linking to a series */}
                 {formData.series_id && (
-                  <div className="grid gap-4 md:grid-cols-2 pt-4 border-t border-border/50">
+                  <div className="space-y-4 pt-4 border-t border-border/50">
+                    <h3 className="text-md font-semibold">Dados do Episódio</h3>
+                    
                     <div className="space-y-2">
-                      <Label htmlFor="season_number">Qual temporada é este episódio?</Label>
+                      <Label htmlFor="episode_title">Título do Episódio *</Label>
                       <Input
-                        id="season_number"
-                        type="number"
-                        min={1}
-                        max={100}
-                        value={formData.season_number || ''}
-                        onChange={(e) => setFormData(prev => ({ ...prev, season_number: parseInt(e.target.value) || null }))}
-                        placeholder="Ex: 1"
+                        id="episode_title"
+                        value={episodeTitle}
+                        onChange={(e) => setEpisodeTitle(e.target.value)}
+                        placeholder="Ex: O Início"
+                        required
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="current_episode">Qual episódio?</Label>
-                      <Input
-                        id="current_episode"
-                        type="number"
-                        min={1}
-                        max={999}
-                        value={formData.current_episode || ''}
-                        onChange={(e) => setFormData(prev => ({ ...prev, current_episode: parseInt(e.target.value) || null }))}
-                        placeholder="Ex: 1"
+                      <Label htmlFor="episode_synopsis">Sinopse do Episódio</Label>
+                      <Textarea
+                        id="episode_synopsis"
+                        value={episodeSynopsis}
+                        onChange={(e) => setEpisodeSynopsis(e.target.value)}
+                        placeholder="Descrição deste episódio..."
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="season_number">Temporada *</Label>
+                        <Input
+                          id="season_number"
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={formData.season_number || ''}
+                          onChange={(e) => setFormData(prev => ({ ...prev, season_number: parseInt(e.target.value) || null }))}
+                          placeholder="Ex: 1"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="current_episode">Episódio *</Label>
+                        <Input
+                          id="current_episode"
+                          type="number"
+                          min={1}
+                          max={999}
+                          value={formData.current_episode || ''}
+                          onChange={(e) => setFormData(prev => ({ ...prev, current_episode: parseInt(e.target.value) || null }))}
+                          placeholder="Ex: 1"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="episode_duration">Duração (min) *</Label>
+                        <Input
+                          id="episode_duration"
+                          type="number"
+                          min={1}
+                          max={600}
+                          value={episodeDuration}
+                          onChange={(e) => setEpisodeDuration(parseInt(e.target.value) || 0)}
+                          placeholder="Ex: 45"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Capa do Episódio (opcional)</Label>
+                      <ImageUploader
+                        value={episodeThumbnail}
+                        onChange={(url) => setEpisodeThumbnail(url)}
+                        aspectRatio="backdrop"
                       />
                     </div>
                   </div>
@@ -579,19 +677,21 @@ export default function MovieForm() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>
-                  {formData.content_type === 'serie' 
-                    ? 'Vídeo do Episódio' 
-                    : formData.content_type === 'espetaculo' 
-                      ? 'Vídeo do Espetáculo' 
-                      : 'Vídeo do Filme'}
-                </Label>
-                <VideoUploader
-                  value={formData.video_url}
-                  onChange={(url) => setFormData(prev => ({ ...prev, video_url: url }))}
-                />
-              </div>
+              {!isCreatingSeriesParent && (
+                <div className="space-y-2">
+                  <Label>
+                    {isAddingEpisode 
+                      ? 'Vídeo do Episódio *' 
+                      : formData.content_type === 'espetaculo' 
+                        ? 'Vídeo do Espetáculo' 
+                        : 'Vídeo do Filme'}
+                  </Label>
+                  <VideoUploader
+                    value={formData.video_url}
+                    onChange={(url) => setFormData(prev => ({ ...prev, video_url: url }))}
+                  />
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="trailer_url">
@@ -683,7 +783,7 @@ export default function MovieForm() {
                 ) : (
                   <>
                     <Save className="h-4 w-4 mr-2" />
-                    {isEditing ? 'Salvar Alterações' : 'Criar Filme'}
+                    {isEditing ? 'Salvar Alterações' : isCreatingSeriesParent ? 'Criar Série' : isAddingEpisode ? 'Adicionar Episódio' : formData.content_type === 'espetaculo' ? 'Criar Espetáculo' : 'Criar Filme'}
                   </>
                 )}
               </Button>
