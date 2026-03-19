@@ -64,6 +64,12 @@ export default function MovieForm() {
     series_id: null,
   });
 
+  // Episode-specific state (used when adding episode to existing series)
+  const [episodeTitle, setEpisodeTitle] = useState('');
+  const [episodeSynopsis, setEpisodeSynopsis] = useState('');
+  const [episodeDuration, setEpisodeDuration] = useState<number>(30);
+  const [episodeThumbnail, setEpisodeThumbnail] = useState('');
+
   // Fetch genres based on content type - must be after formData declaration
   const { data: genres, isLoading: genresLoading } = useGenresByContentType(formData.content_type);
   
@@ -77,6 +83,12 @@ export default function MovieForm() {
   
   // Check if an existing series is selected
   const isExistingSeriesSelected = !!formData.series_id && !!selectedSeriesData;
+  
+  // Determine if we're creating a series parent (no video needed)
+  const isCreatingSeriesParent = formData.content_type === 'serie' && !formData.series_id && !isEditing;
+  // Determine if we're adding an episode to an existing series
+  const isAddingEpisode = formData.content_type === 'serie' && !!formData.series_id;
+
 
   // Load movie data for editing
   useEffect(() => {
