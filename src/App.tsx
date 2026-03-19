@@ -25,6 +25,8 @@ import AdminMovies from "./pages/admin/Movies";
 import AdminUsers from "./pages/admin/Users";
 import MovieForm from "./pages/admin/MovieForm";
 import VideoApproval from "./pages/admin/VideoApproval";
+import CreateSeries from "./pages/admin/CreateSeries";
+import UploadVideo from "./pages/admin/UploadVideo";
 import ProducerMovies from "./pages/producer/Movies";
 import ProducerUploadMovie from "./pages/producer/UploadMovie";
 import ProducerPricing from "./pages/producer/Pricing";
