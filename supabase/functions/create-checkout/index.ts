@@ -98,7 +98,6 @@ serve(async (req) => {
         },
         payment_methods: {
           excluded_payment_types: [],
-          default_payment_method_id: "pix",
         },
         back_urls: {
           success: `${origin}/pricing?success=true`,
