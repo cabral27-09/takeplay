@@ -48,13 +48,17 @@ export function PricingCard({
     return "Assinar Agora";
   };
 
+  const isInteractive = !isCurrentPlan && !isLoading;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
+      onClick={isInteractive ? handleAction : undefined}
       className={cn(
-        "relative flex flex-col rounded-2xl border p-6 md:p-8",
+        "relative flex flex-col rounded-2xl border p-6 md:p-8 transition-all duration-200",
         info.highlighted ? "border-primary bg-primary/5 shadow-lg shadow-primary/20" : "border-border bg-card",
+        isInteractive && "cursor-pointer hover:border-primary/50 hover:shadow-md active:bg-primary/5",
       )}
     >
       {/* Popular Badge */}
