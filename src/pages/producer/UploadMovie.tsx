@@ -778,7 +778,33 @@ export default function ProducerUploadMovie() {
               )}
             </div>
 
-            {/* Media */}
+            {/* Nível de Acesso */}
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold border-b border-border pb-2">
+                Quem pode assistir? {isExistingSeriesSelected && '(Herdado)'}
+              </h2>
+              <div className="max-w-xs">
+                <Select
+                  value={formData.min_tier}
+                  onValueChange={(value) => !isExistingSeriesSelected && setFormData(prev => ({ ...prev, min_tier: value as 'free' | 'standard' | 'premium' }))}
+                  disabled={isExistingSeriesSelected}
+                >
+                  <SelectTrigger className={isExistingSeriesSelected ? 'bg-muted' : ''}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="free">Grátis</SelectItem>
+                    <SelectItem value="standard">Standard</SelectItem>
+                    <SelectItem value="premium">Premium</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Define qual plano de assinatura é necessário para assistir este conteúdo.
+                </p>
+              </div>
+            </div>
+
+
             <div className="space-y-4">
               <h2 className="text-lg font-semibold border-b border-border pb-2">
                 {isExistingSeriesSelected ? 'Mídia (Imagens Herdadas + Vídeo do Episódio)' : 'Mídia'}
