@@ -1,45 +1,31 @@
 
 
-## Plano: Upload de vídeo em segundo plano (background upload)
+## Plano: Adicionar campo "Produtora" visível no formulário de série
 
 ### Problema
-
-O upload de vídeo usa `tus-js-client` dentro do componente `VideoUploader`, que é destruído quando o usuário navega para outra página. O upload para imediatamente.
+O campo `producer_name` é preenchido automaticamente com o nome do perfil do usuário, mas não aparece visualmente no formulário. O usuário quer poder ver e editar quem é a produtora ao criar uma série.
 
 ### Solução
+Adicionar um campo de texto "Produtora" na seção "Informações Básicas" do `src/pages/producer/UploadMovie.tsx`, pré-preenchido com o nome do perfil mas editável.
 
-Criar um **contexto global de upload** que mantém a instância TUS viva independente da página, com um **indicador flutuante** visível em qualquer tela.
+### Alteração
 
-### Arquivos a criar/editar
+**Arquivo:** `src/pages/producer/UploadMovie.tsx`
 
-#### 1. Criar `src/contexts/UploadContext.tsx`
-- Contexto React global com estado do upload (arquivo, progresso, velocidade, status, erro)
-- Mantém a referência `tus.Upload` no contexto, fora de qualquer componente de página
-- Expõe funções: `startUpload(file)`, `pauseUpload()`, `resumeUpload()`, `cancelUpload()`
-- Callback `onComplete(filePath)` configurável para receber o path quando terminar
-- Provido no `App.tsx` envolvendo todas as rotas
+Na seção "Informações Básicas" (após o campo de Ano de Produção, ~linha 696), adicionar:
 
-#### 2. Criar `src/components/upload/GlobalUploadIndicator.tsx`
-- Barra flutuante fixa no canto inferior direito, visível em qualquer página
-- Mostra: nome do arquivo, barra de progresso, %, velocidade
-- Botões de pausar/continuar/cancelar
-- Aparece apenas quando há upload ativo
-- Minimizável para um ícone pequeno
+```
+<div className="space-y-2">
+  <Label htmlFor="producer_name">Produtora *</Label>
+  <Input
+    id="producer_name"
+    value={formData.producer_name}
+    onChange={(e) => setFormData(prev => ({ ...prev, producer_name: e.target.value }))}
+    placeholder="Nome da produtora ou produtor"
+    required
+  />
+</div>
+```
 
-#### 3. Editar `src/components/admin/VideoUploader.tsx`
-- Quando um upload está em andamento no contexto global, mostrar o progresso inline (lido do contexto)
-- Ao selecionar arquivo, chamar `startUpload()` do contexto ao invés de criar TUS localmente
-- Registrar callback `onComplete` para chamar o `onChange(filePath)` do formulário
-- Manter a UI de seleção de arquivo e exibição de vídeo já enviado
-
-#### 4. Editar `src/App.tsx`
-- Envolver rotas com `UploadProvider`
-- Renderizar `GlobalUploadIndicator` dentro do provider
-
-### Comportamento esperado
-
-1. Usuário seleciona vídeo → upload inicia no contexto global
-2. Usuário navega para outra página → upload continua, indicador flutuante visível
-3. Usuário volta ao formulário → progresso atualizado inline
-4. Upload completa → toast de sucesso, `video_url` atualizado se o formulário estiver aberto
+O campo aparecerá para todos os tipos de conteúdo (filme, série, espetáculo) quando não estiver no modo de adicionar episódio a série existente (já que nesse caso herda da série pai).
 
