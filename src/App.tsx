@@ -38,34 +38,37 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/movie/:id" element={<MovieDetail />} />
-            <Route path="/watch/:id" element={<Watch />} />
-            <Route path="/share/:id" element={<Share />} />
-            <Route path="/browse" element={<Browse />} />
-            <Route path="/filmes" element={<Filmes />} />
-            <Route path="/series" element={<Series />} />
-            <Route path="/espetaculo" element={<Espetaculo />} />
-            <Route path="/genres" element={<Genres />} />
-            <Route path="/trailers" element={<Trailers />} />
-            <Route path="/pricing" element={<Pricing />} />
-            <Route path="/search" element={<Search />} />
-            {/* Admin routes */}
-            <Route path="/admin/movies" element={<AdminMovies />} />
-            <Route path="/admin/movies/new" element={<MovieForm />} />
-            <Route path="/admin/movies/:id/edit" element={<MovieForm />} />
-            <Route path="/admin/users" element={<AdminUsers />} />
-            <Route path="/admin/approval" element={<VideoApproval />} />
-            {/* Producer routes */}
-            <Route path="/producer/movies" element={<ProducerMovies />} />
-            <Route path="/producer/movies/new" element={<ProducerUploadMovie />} />
-            <Route path="/producer/movies/:id/edit" element={<ProducerUploadMovie />} />
-            <Route path="/producer/pricing" element={<ProducerPricing />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <UploadProvider>
+            <GlobalUploadIndicator />
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/movie/:id" element={<MovieDetail />} />
+              <Route path="/watch/:id" element={<Watch />} />
+              <Route path="/share/:id" element={<Share />} />
+              <Route path="/browse" element={<Browse />} />
+              <Route path="/filmes" element={<Filmes />} />
+              <Route path="/series" element={<Series />} />
+              <Route path="/espetaculo" element={<Espetaculo />} />
+              <Route path="/genres" element={<Genres />} />
+              <Route path="/trailers" element={<Trailers />} />
+              <Route path="/pricing" element={<Pricing />} />
+              <Route path="/search" element={<Search />} />
+              {/* Admin routes */}
+              <Route path="/admin/movies" element={<AdminMovies />} />
+              <Route path="/admin/movies/new" element={<MovieForm />} />
+              <Route path="/admin/movies/:id/edit" element={<MovieForm />} />
+              <Route path="/admin/users" element={<AdminUsers />} />
+              <Route path="/admin/approval" element={<VideoApproval />} />
+              {/* Producer routes */}
+              <Route path="/producer/movies" element={<ProducerMovies />} />
+              <Route path="/producer/movies/new" element={<ProducerUploadMovie />} />
+              <Route path="/producer/movies/:id/edit" element={<ProducerUploadMovie />} />
+              <Route path="/producer/pricing" element={<ProducerPricing />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </UploadProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
