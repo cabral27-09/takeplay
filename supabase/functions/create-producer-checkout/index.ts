@@ -78,6 +78,7 @@ serve(async (req) => {
           pending: `${origin}/producer/pricing?pending=true`,
         },
         auto_return: "approved",
+        notification_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/mp-webhook`,
         external_reference: `${user.id}|${tier}`,
         metadata: {
           user_id: user.id,
