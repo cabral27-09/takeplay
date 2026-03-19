@@ -6,7 +6,7 @@ export function useVideoViews(movieId: string | undefined) {
   const { user } = useAuth();
   const accumulatedRef = useRef(0);
   const lastSendRef = useRef(0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeRef = useRef(false);
 
   const sendView = useCallback(async (seconds: number) => {
