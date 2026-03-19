@@ -1,34 +1,45 @@
 
 
-## Plano: Adicionar seletor de tier e gênero "Ação" no fluxo de upload
+## Plano: Upload de vídeo em segundo plano (background upload)
 
-### Problema 1: Sem seletor de nível de acesso (min_tier) no upload do produtor
+### Problema
 
-O formulário do produtor (`src/pages/producer/UploadMovie.tsx`) não tem o campo para escolher qual tipo de assinatura pode assistir ao conteúdo. Ele sempre salva como `free`. O admin tem esse campo, mas o produtor não.
-
-### Problema 2: Gênero "Ação" não existe no banco de dados
-
-Os gêneros atuais na categoria `geral` são: Animação, Aventura, Comédia, Documentário, Drama, Ficção Científica, Romance, Suspense, Terror. Falta **Ação**.
+O upload de vídeo usa `tus-js-client` dentro do componente `VideoUploader`, que é destruído quando o usuário navega para outra página. O upload para imediatamente.
 
 ### Solução
 
-#### 1. Inserir gênero "Ação" no banco de dados
+Criar um **contexto global de upload** que mantém a instância TUS viva independente da página, com um **indicador flutuante** visível em qualquer tela.
 
-Usar o insert tool para adicionar:
-```sql
-INSERT INTO genres (name, slug, category) VALUES ('Ação', 'acao', 'geral');
-```
+### Arquivos a criar/editar
 
-#### 2. Adicionar seção "Nível de Acesso" no formulário do produtor
+#### 1. Criar `src/contexts/UploadContext.tsx`
+- Contexto React global com estado do upload (arquivo, progresso, velocidade, status, erro)
+- Mantém a referência `tus.Upload` no contexto, fora de qualquer componente de página
+- Expõe funções: `startUpload(file)`, `pauseUpload()`, `resumeUpload()`, `cancelUpload()`
+- Callback `onComplete(filePath)` configurável para receber o path quando terminar
+- Provido no `App.tsx` envolvendo todas as rotas
 
-No arquivo `src/pages/producer/UploadMovie.tsx`, adicionar uma seção entre "Gêneros" e "Mídia" com um `Select` para `min_tier`:
+#### 2. Criar `src/components/upload/GlobalUploadIndicator.tsx`
+- Barra flutuante fixa no canto inferior direito, visível em qualquer página
+- Mostra: nome do arquivo, barra de progresso, %, velocidade
+- Botões de pausar/continuar/cancelar
+- Aparece apenas quando há upload ativo
+- Minimizável para um ícone pequeno
 
-- Opções: Grátis / Standard / Premium
-- Quando série existente selecionada: campo desabilitado (herdado)
-- Mesmo padrão visual usado no admin (`MovieForm.tsx`)
+#### 3. Editar `src/components/admin/VideoUploader.tsx`
+- Quando um upload está em andamento no contexto global, mostrar o progresso inline (lido do contexto)
+- Ao selecionar arquivo, chamar `startUpload()` do contexto ao invés de criar TUS localmente
+- Registrar callback `onComplete` para chamar o `onChange(filePath)` do formulário
+- Manter a UI de seleção de arquivo e exibição de vídeo já enviado
 
-### Arquivos a editar
+#### 4. Editar `src/App.tsx`
+- Envolver rotas com `UploadProvider`
+- Renderizar `GlobalUploadIndicator` dentro do provider
 
-1. **Banco de dados** — INSERT do gênero "Ação"
-2. **`src/pages/producer/UploadMovie.tsx`** — adicionar seletor de `min_tier` com label "Quem pode assistir?"
+### Comportamento esperado
+
+1. Usuário seleciona vídeo → upload inicia no contexto global
+2. Usuário navega para outra página → upload continua, indicador flutuante visível
+3. Usuário volta ao formulário → progresso atualizado inline
+4. Upload completa → toast de sucesso, `video_url` atualizado se o formulário estiver aberto
 
