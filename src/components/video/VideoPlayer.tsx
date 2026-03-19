@@ -83,7 +83,7 @@ export function VideoPlayer({
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const isScrubbingRef = useRef(false);
   const [scrubValue, setScrubValue] = useState(0);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout>();
+  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const formatTime = (time: number) => {
     if (!Number.isFinite(time) || time < 0) return '0:00';
