@@ -104,8 +104,13 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       chunkSize: 6 * 1024 * 1024,
       onError: (err) => {
         console.error('TUS upload error:', err);
-        setState(prev => ({ ...prev, status: 'error', error: err.message || 'Erro no upload' }));
-        toast({ title: 'Erro no upload', description: err.message || 'Erro desconhecido', variant: 'destructive' });
+        const rawMsg = err.message || 'Erro desconhecido';
+        const is413 = rawMsg.includes('413') || rawMsg.toLowerCase().includes('maximum size exceeded');
+        const friendlyMsg = is413
+          ? 'Este arquivo ultrapassa o limite de tamanho permitido pelo servidor. Tente um arquivo menor que 6GB.'
+          : rawMsg;
+        setState(prev => ({ ...prev, status: 'error', error: friendlyMsg }));
+        toast({ title: 'Erro no upload', description: friendlyMsg, variant: 'destructive' });
       },
       onProgress: (bytesUploaded, bytesTotal) => {
         const percentage = Math.round((bytesUploaded / bytesTotal) * 100);

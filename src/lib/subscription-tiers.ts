@@ -76,7 +76,7 @@ export const PRODUCER_TIERS: Record<ProducerTier, ProducerTierInfo> = {
     ],
     uploadsAllowed: 10,
     validityMonths: 12,
-    maxFileSizeGB: 5,
+    maxFileSizeGB: 6,
     paymentMode: 'payment',
     highlighted: true,
   },
@@ -92,7 +92,7 @@ export const PRODUCER_TIERS: Record<ProducerTier, ProducerTierInfo> = {
     ],
     uploadsAllowed: 5,
     validityMonths: 6,
-    maxFileSizeGB: 5,
+    maxFileSizeGB: 6,
     paymentMode: 'payment',
   },
   produtor_avulso: {
@@ -107,7 +107,7 @@ export const PRODUCER_TIERS: Record<ProducerTier, ProducerTierInfo> = {
     ],
     uploadsAllowed: 1,
     validityMonths: 1,
-    maxFileSizeGB: 5,
+    maxFileSizeGB: 6,
     paymentMode: 'payment',
   },
 };
