@@ -18,7 +18,7 @@ const Series = () => {
 
   // Filter movies by content_type = 'serie' and optionally by genre
   const filteredSeries = useMemo(() => {
-    let result = movies.filter(m => m.content_type === 'serie');
+    let result = movies.filter(m => m.content_type === 'serie' && !m.series_id);
     
     if (generoParam) {
       result = result.filter(m => 
