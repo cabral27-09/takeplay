@@ -6,13 +6,11 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Get auth token from request
     const authHeader = req.headers.get('authorization');
     if (!authHeader) {
       return new Response(
@@ -21,13 +19,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Create Supabase client with service role for storage operations
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Parse request body
     const { upload_id, total_chunks, final_path, content_type } = await req.json();
 
     if (!upload_id || !total_chunks || !final_path) {
@@ -39,84 +34,144 @@ Deno.serve(async (req) => {
 
     console.log(`Finalizing upload ${upload_id}: ${total_chunks} chunks -> ${final_path}`);
 
-    // Download and concatenate all chunks
-    const chunks: Uint8Array[] = [];
-    let totalSize = 0;
+    // --- S3 Multipart Upload via Supabase Storage S3 endpoint ---
+    const s3Endpoint = `${supabaseUrl}/storage/v1/s3`;
+    const bucket = 'videos';
 
-    for (let i = 0; i < total_chunks; i++) {
-      const chunkPath = `temp/${upload_id}/chunk_${String(i).padStart(5, '0')}.bin`;
-      
-      console.log(`Downloading chunk ${i + 1}/${total_chunks}: ${chunkPath}`);
-      
-      const { data, error } = await supabase.storage
-        .from('videos')
-        .download(chunkPath);
+    // Helper to make S3-like requests with service role auth
+    const s3Fetch = async (path: string, options: RequestInit = {}) => {
+      const headers = new Headers(options.headers || {});
+      headers.set('Authorization', `Bearer ${supabaseServiceKey}`);
+      return fetch(`${s3Endpoint}${path}`, { ...options, headers });
+    };
 
-      if (error || !data) {
-        console.error(`Error downloading chunk ${i}:`, error);
-        return new Response(
-          JSON.stringify({ error: `Failed to download chunk ${i}: ${error?.message}` }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+    // 1. Initiate multipart upload
+    const initRes = await s3Fetch(`/${bucket}/${final_path}?uploads`, {
+      method: 'POST',
+      headers: { 'Content-Type': content_type || 'video/mp4' },
+    });
 
-      const chunkData = new Uint8Array(await data.arrayBuffer());
-      chunks.push(chunkData);
-      totalSize += chunkData.length;
-      
-      console.log(`Chunk ${i + 1}/${total_chunks} downloaded: ${chunkData.length} bytes`);
-    }
-
-    console.log(`All chunks downloaded. Total size: ${totalSize} bytes (${(totalSize / (1024 * 1024 * 1024)).toFixed(2)} GB)`);
-
-    // Concatenate all chunks into a single buffer
-    const finalBuffer = new Uint8Array(totalSize);
-    let offset = 0;
-    for (const chunk of chunks) {
-      finalBuffer.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    console.log(`Uploading final file to ${final_path}...`);
-
-    // Upload the final concatenated file
-    const { error: uploadError } = await supabase.storage
-      .from('videos')
-      .upload(final_path, finalBuffer, {
-        contentType: content_type || 'video/mp4',
-        upsert: true,
-      });
-
-    if (uploadError) {
-      console.error('Error uploading final file:', uploadError);
+    if (!initRes.ok) {
+      const errText = await initRes.text();
+      console.error('S3 initiate multipart error:', initRes.status, errText);
       return new Response(
-        JSON.stringify({ error: `Failed to upload final file: ${uploadError.message}` }),
+        JSON.stringify({ error: `Failed to initiate multipart upload: ${errText}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Final file uploaded successfully to ${final_path}`);
+    const initXml = await initRes.text();
+    // Parse UploadId from XML response
+    const uploadIdMatch = initXml.match(/<UploadId>(.+?)<\/UploadId>/);
+    if (!uploadIdMatch) {
+      console.error('Failed to parse UploadId from:', initXml);
+      return new Response(
+        JSON.stringify({ error: 'Failed to parse multipart UploadId' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const s3UploadId = uploadIdMatch[1];
+    console.log(`S3 multipart initiated, UploadId: ${s3UploadId}`);
 
-    // Clean up temp chunks
-    console.log(`Cleaning up temp chunks for ${upload_id}...`);
-    
-    const deletePromises = [];
+    // 2. Upload each chunk as a part (one at a time to save memory)
+    const parts: Array<{ PartNumber: number; ETag: string }> = [];
+    let totalSize = 0;
+
     for (let i = 0; i < total_chunks; i++) {
       const chunkPath = `temp/${upload_id}/chunk_${String(i).padStart(5, '0')}.bin`;
-      deletePromises.push(
-        supabase.storage.from('videos').remove([chunkPath])
+
+      console.log(`Processing chunk ${i + 1}/${total_chunks}: ${chunkPath}`);
+
+      // Download chunk from temp storage
+      const { data: chunkData, error: dlError } = await supabase.storage
+        .from('videos')
+        .download(chunkPath);
+
+      if (dlError || !chunkData) {
+        console.error(`Error downloading chunk ${i}:`, dlError);
+        // Abort the multipart upload
+        await s3Fetch(`/${bucket}/${final_path}?uploadId=${encodeURIComponent(s3UploadId)}`, {
+          method: 'DELETE',
+        });
+        return new Response(
+          JSON.stringify({ error: `Failed to download chunk ${i}: ${dlError?.message}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const chunkBytes = await chunkData.arrayBuffer();
+      totalSize += chunkBytes.byteLength;
+
+      // Upload as S3 part (part numbers are 1-indexed)
+      const partNumber = i + 1;
+      const partRes = await s3Fetch(
+        `/${bucket}/${final_path}?partNumber=${partNumber}&uploadId=${encodeURIComponent(s3UploadId)}`,
+        {
+          method: 'PUT',
+          body: chunkBytes,
+          headers: { 'Content-Type': 'application/octet-stream' },
+        }
+      );
+
+      if (!partRes.ok) {
+        const errText = await partRes.text();
+        console.error(`Error uploading part ${partNumber}:`, errText);
+        await s3Fetch(`/${bucket}/${final_path}?uploadId=${encodeURIComponent(s3UploadId)}`, {
+          method: 'DELETE',
+        });
+        return new Response(
+          JSON.stringify({ error: `Failed to upload part ${partNumber}: ${errText}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const etag = partRes.headers.get('ETag') || '';
+      parts.push({ PartNumber: partNumber, ETag: etag });
+
+      console.log(`Part ${partNumber}/${total_chunks} uploaded, ETag: ${etag}, size: ${chunkBytes.byteLength}`);
+    }
+
+    // 3. Complete multipart upload
+    const completeXml = `<CompleteMultipartUpload>${parts.map(p =>
+      `<Part><PartNumber>${p.PartNumber}</PartNumber><ETag>${p.ETag}</ETag></Part>`
+    ).join('')}</CompleteMultipartUpload>`;
+
+    const completeRes = await s3Fetch(
+      `/${bucket}/${final_path}?uploadId=${encodeURIComponent(s3UploadId)}`,
+      {
+        method: 'POST',
+        body: completeXml,
+        headers: { 'Content-Type': 'application/xml' },
+      }
+    );
+
+    if (!completeRes.ok) {
+      const errText = await completeRes.text();
+      console.error('Error completing multipart:', errText);
+      return new Response(
+        JSON.stringify({ error: `Failed to complete multipart upload: ${errText}` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    console.log(`S3 multipart completed for ${final_path}, total size: ${totalSize} bytes`);
+
+    // 4. Clean up temp chunks
+    console.log(`Cleaning up temp chunks for ${upload_id}...`);
+    const deletePromises = [];
+    for (let i = 0; i < total_chunks; i++) {
+      const chunkPath = `temp/${upload_id}/chunk_${String(i).padStart(5, '0')}.bin`;
+      deletePromises.push(supabase.storage.from('videos').remove([chunkPath]));
+    }
     await Promise.all(deletePromises);
     console.log(`Temp chunks cleaned up for ${upload_id}`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         path: final_path,
         size: totalSize,
-        message: 'Video upload finalized successfully'
+        message: 'Video upload finalized successfully via S3 multipart',
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
