@@ -1,102 +1,55 @@
 
-Sim — agora eu sei exatamente onde está o problema, e ele é corrigível.
+Diagnóstico confirmado:
+- O erro continua porque a correção anterior ainda usa autenticação S3 errada no `finalize-video-upload`.
+- O código atual assina o endpoint S3 com `SUPABASE_SERVICE_ROLE_KEY` como `sessionToken`, mas o S3 espera o JWT real do usuário autenticado.
+- Ele também está usando o host `...supabase.co/storage/v1/s3` em vez do host direto `...storage.supabase.co/storage/v1/s3`.
+- Resultado: `SignatureDoesNotMatch` logo no início da finalização, antes de montar o arquivo. Por isso você continua recebendo o mesmo erro genérico de “non-2xx”.
 
-## Diagnóstico confirmado
+O que vou fazer agora:
+1. Parar de depender desse fluxo quebrado de “subir chunk -> edge function -> montar no backend”.
+   - Reescrever o `UploadContext` para fazer Multipart Upload direto do navegador para o storage privado.
+   - Usar a sessão autenticada atual, o project ref e o endpoint direto de storage.
+   - Manter progresso, pausa, retomada, cancelamento e callback final como já existem hoje.
 
-O upload de 2.4GB não está falhando mais por causa do limite de 6GB no bucket. O que acontece hoje é:
+2. Deixar o upload realmente viável para arquivo grande.
+   - Enviar as partes direto para o arquivo final `movies/...` em vez de criar centenas de arquivos temporários e depois copiar tudo outra vez.
+   - Ajustar o tamanho das partes para reduzir o número de requisições e manter retry por parte.
 
-- Os chunks pequenos estão funcionando
-- O upload chega a 99% porque todos os chunks sobem com sucesso
-- A falha acontece só na etapa final, quando o backend tenta montar o arquivo final
+3. Corrigir o feedback de erro.
+   - Mostrar erro por etapa: iniciar multipart, enviar parte X/Y, concluir upload, abortar.
+   - Parar de depender da mensagem genérica de edge function.
 
-Eu confirmei isso pelos logs:
-- `upload-video-chunk`: último chunk foi enviado com sucesso
-- `finalize-video-upload`: erro exato
-  - `InvalidSignature`
-  - `Unsupported authorization type`
+4. Tratar o fluxo antigo.
+   - Remover do cliente o uso de `upload-video-chunk` e `finalize-video-upload`.
+   - Se eu mantiver essas funções por compatibilidade, vou endurecer a autenticação e deixar claro que não são mais o caminho principal.
 
-Ou seja: o endpoint S3 do storage está recebendo uma autenticação errada na finalização. O código atual tenta usar `Authorization: Bearer ...` no endpoint S3, mas esse endpoint exige autenticação S3 compatível, não bearer token simples.
-
-## O que vou corrigir
-
-### 1. Corrigir a função `finalize-video-upload`
-Vou reescrever a autenticação da etapa final para usar o método correto de upload multipart compatível com o storage S3.
-
-Hoje o problema está aqui:
-- `supabase/functions/finalize-video-upload/index.ts`
-
-Mudança:
-- remover o `fetch` manual com header bearer para o endpoint S3
-- usar autenticação S3 correta para:
-  1. iniciar multipart upload
-  2. enviar cada part
-  3. completar o multipart upload
-  4. abortar/limpar em caso de erro
-
-### 2. Manter o envio por chunks do frontend
-Essa parte já está funcionando e não é o gargalo principal.
-
-Arquivos que devem continuar quase iguais:
-- `src/contexts/UploadContext.tsx`
-- `supabase/functions/upload-video-chunk/index.ts`
-
-### 3. Melhorar a mensagem de erro no app
-Hoje a interface mostra só:
-- `Edge Function returned a non-2xx status code`
-
-Vou trocar isso por mensagens úteis, por exemplo:
-- erro na finalização do vídeo
-- erro de autenticação do storage
-- falha ao montar o arquivo final
-
-Assim, se algo der errado de novo, você vai ver o ponto real da falha.
-
-### 4. Validar o fluxo inteiro
-Depois da correção, vou validar o fluxo esperado:
-1. upload dos chunks
-2. finalização sem erro no 99%
-3. gravação do caminho final do vídeo
-4. reprodução normal via URL assinada
-
-## Arquivos envolvidos
-
-### Alteração principal
-- `supabase/functions/finalize-video-upload/index.ts`
-
-### Ajustes secundários
+Arquivos principais:
 - `src/contexts/UploadContext.tsx`
 - `src/components/admin/VideoUploader.tsx`
 - `src/components/upload/GlobalUploadIndicator.tsx`
+- `supabase/functions/upload-video-chunk/index.ts`
+- `supabase/functions/finalize-video-upload/index.ts`
 
-## Detalhes técnicos
-
+Detalhes técnicos:
 ```text
-Browser
-  -> envia chunks de 5MB
-  -> upload-video-chunk salva em temp/
+Hoje
+browser -> edge function por chunk -> bucket temp/
+       -> edge function final -> baixa tudo -> reenvia tudo -> falha
 
-finalize-video-upload
-  -> lê chunks temporários
-  -> faz multipart upload com autenticação S3 correta
-  -> completa arquivo final em videos/movies/...
-  -> remove temp/
+Novo fluxo
+browser -> storage multipart direto -> movies/arquivo-final.mp4
 ```
 
-Ponto mais importante:
-- o problema atual não é mais “limite de 6GB”
-- o problema real é “finalização com autenticação errada no endpoint S3”
+Validação obrigatória:
+- não basta responder 2xx
+- o upload precisa chegar a 100%
+- o arquivo final precisa existir no bucket privado com tamanho coerente
+- o caminho salvo precisa funcionar no fluxo de reprodução
+- se falhar, a UI precisa mostrar a etapa exata da falha
 
-## Resultado esperado após a correção
+Observações:
+- Não precisa mudar banco nem o limite de 6GB.
+- O problema agora não é o limite; é a arquitetura atual de upload/finalização.
+- Eu não vou insistir em outro remendo pequeno no `finalize-video-upload` como solução principal, porque mesmo corrigindo a assinatura ele continua sendo um caminho frágil para 2.4GB.
 
-- o vídeo de 2.4GB para de falhar em 99%
-- o erro 413 deixa de ser irrelevante nesse fluxo
-- o upload grande passa a concluir de verdade
-- você mantém upload resumível e compatível com arquivos grandes
-
-## Observação importante
-
-Se, depois de corrigir a autenticação, a finalização ainda ficar longa demais para uma execução única, eu deixarei a etapa final preparada para um fluxo assíncrono. Mas pelo que vi agora, o bloqueio atual é objetivo e imediato: a autenticação S3 está errada.
-
-## Próxima implementação
-
-Vou aplicar a correção primeiro no backend de finalização e depois revisar a interface para mostrar erros reais em vez da mensagem genérica.
+Depois da aprovação, eu implemento.
