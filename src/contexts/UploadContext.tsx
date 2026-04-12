@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { S3Client, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand } from '@aws-sdk/client-s3';
 
 export type UploadStatus = 'idle' | 'uploading' | 'paused' | 'completed' | 'error';
 
@@ -35,7 +36,24 @@ const initialState: UploadState = {
 
 const UploadContext = createContext<UploadContextType | null>(null);
 
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunk
+const PART_SIZE = 10 * 1024 * 1024; // 10MB per part
+const BUCKET = 'videos';
+const PROJECT_REF = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+function createS3Client(accessToken: string) {
+  return new S3Client({
+    forcePathStyle: true,
+    region: 'us-east-1',
+    endpoint: `${SUPABASE_URL}/storage/v1/s3`,
+    credentials: {
+      accessKeyId: PROJECT_REF,
+      secretAccessKey: ANON_KEY,
+      sessionToken: accessToken,
+    },
+  });
+}
 
 export function UploadProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<UploadState>(initialState);
@@ -44,8 +62,9 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   const resumeResolverRef = useRef<(() => void) | null>(null);
   const lastProgressRef = useRef({ bytes: 0, time: Date.now() });
   const onCompleteRef = useRef<((filePath: string) => void) | null>(null);
-  // Track current upload to allow cancel/pause
-  const uploadIdRef = useRef<string | null>(null);
+  const s3UploadIdRef = useRef<string | null>(null);
+  const s3ClientRef = useRef<S3Client | null>(null);
+  const filePathRef = useRef<string | null>(null);
 
   const registerOnComplete = useCallback((cb: ((filePath: string) => void) | null) => {
     onCompleteRef.current = cb;
@@ -58,8 +77,24 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const abortS3Upload = useCallback(async () => {
+    if (s3UploadIdRef.current && s3ClientRef.current && filePathRef.current) {
+      try {
+        await s3ClientRef.current.send(new AbortMultipartUploadCommand({
+          Bucket: BUCKET,
+          Key: filePathRef.current,
+          UploadId: s3UploadIdRef.current,
+        }));
+      } catch (e) {
+        console.warn('Failed to abort S3 multipart upload:', e);
+      }
+    }
+    s3UploadIdRef.current = null;
+    s3ClientRef.current = null;
+    filePathRef.current = null;
+  }, []);
+
   const startUpload = useCallback(async (file: File, onComplete?: (filePath: string) => void) => {
-    // Validate
     const validTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
     if (!validTypes.includes(file.type)) {
       toast({ title: 'Formato inválido', description: 'Use MP4, WebM ou MOV.', variant: 'destructive' });
@@ -83,8 +118,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
     const fileExt = file.name.split('.').pop();
     const filePath = `movies/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-    const uploadId = `${Date.now()}-${Math.random().toString(36).substring(2)}`;
-    uploadIdRef.current = uploadId;
+    filePathRef.current = filePath;
     cancelledRef.current = false;
     pausedRef.current = false;
 
@@ -99,59 +133,77 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     });
     lastProgressRef.current = { bytes: 0, time: Date.now() };
 
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-    let uploadedBytes = 0;
+    const s3 = createS3Client(session.access_token);
+    s3ClientRef.current = s3;
 
     try {
-      // Upload chunks sequentially
-      for (let i = 0; i < totalChunks; i++) {
-        // Check cancel
-        if (cancelledRef.current) return;
+      // 1. Initiate multipart upload
+      setState(prev => ({ ...prev, speed: 'Iniciando upload...' }));
+      const createRes = await s3.send(new CreateMultipartUploadCommand({
+        Bucket: BUCKET,
+        Key: filePath,
+        ContentType: file.type,
+      }));
+      const uploadId = createRes.UploadId;
+      if (!uploadId) throw new Error('Falha ao iniciar upload multipart');
+      s3UploadIdRef.current = uploadId;
+      console.log(`S3 multipart initiated: ${uploadId} for ${filePath}`);
 
-        // Wait if paused
+      // 2. Upload parts
+      const totalParts = Math.ceil(file.size / PART_SIZE);
+      const parts: Array<{ PartNumber: number; ETag: string }> = [];
+      let uploadedBytes = 0;
+
+      for (let i = 0; i < totalParts; i++) {
+        if (cancelledRef.current) { await abortS3Upload(); return; }
         await waitIfPaused();
-        if (cancelledRef.current) return;
+        if (cancelledRef.current) { await abortS3Upload(); return; }
 
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunk = file.slice(start, end);
+        // Refresh token if needed
+        const { data: { session: freshSession } } = await supabase.auth.getSession();
+        if (freshSession && freshSession.access_token !== session.access_token) {
+          const newS3 = createS3Client(freshSession.access_token);
+          s3ClientRef.current = newS3;
+        }
+        const currentS3 = s3ClientRef.current!;
 
-        const formData = new FormData();
-        formData.append('upload_id', uploadId);
-        formData.append('chunk_index', String(i));
-        formData.append('total_chunks', String(totalChunks));
-        formData.append('chunk', chunk, `chunk_${i}.bin`);
+        const start = i * PART_SIZE;
+        const end = Math.min(start + PART_SIZE, file.size);
+        const partNumber = i + 1;
 
-        // Retry logic for each chunk
+        // Retry logic
         let attempts = 0;
         const maxAttempts = 3;
-        let success = false;
+        let partETag: string | null = null;
 
-        while (attempts < maxAttempts && !success) {
-          if (cancelledRef.current) return;
+        while (attempts < maxAttempts && !partETag) {
+          if (cancelledRef.current) { await abortS3Upload(); return; }
           attempts++;
 
           try {
-            const { data, error } = await supabase.functions.invoke('upload-video-chunk', {
-              body: formData,
-            });
+            const chunk = file.slice(start, end);
+            const chunkBuffer = await chunk.arrayBuffer();
 
-            if (error) {
-              throw new Error(error.message || 'Erro no upload do chunk');
-            }
+            const partRes = await currentS3.send(new UploadPartCommand({
+              Bucket: BUCKET,
+              Key: filePath,
+              UploadId: uploadId,
+              PartNumber: partNumber,
+              Body: new Uint8Array(chunkBuffer),
+            }));
 
-            if (data?.error) {
-              throw new Error(data.error);
-            }
-
-            success = true;
+            if (!partRes.ETag) throw new Error(`Sem ETag para parte ${partNumber}`);
+            partETag = partRes.ETag;
           } catch (err) {
-            if (attempts >= maxAttempts) throw err;
-            // Wait before retry
+            console.error(`Part ${partNumber} attempt ${attempts} failed:`, err);
+            if (attempts >= maxAttempts) {
+              throw new Error(`Falha ao enviar parte ${partNumber}/${totalParts} após ${maxAttempts} tentativas`);
+            }
             await new Promise(r => setTimeout(r, 2000 * attempts));
           }
         }
 
+        parts.push({ PartNumber: partNumber, ETag: partETag! });
         uploadedBytes += (end - start);
         const percentage = Math.round((uploadedBytes / file.size) * 100);
 
@@ -170,35 +222,28 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
         setState(prev => ({
           ...prev,
-          progress: Math.min(percentage, 99), // Reserve 100% for finalization
+          progress: Math.min(percentage, 99),
           ...(speedStr ? { speed: speedStr } : {}),
         }));
       }
 
-      if (cancelledRef.current) return;
+      if (cancelledRef.current) { await abortS3Upload(); return; }
 
-      // Finalize: call finalize-video-upload to assemble via S3 multipart
+      // 3. Complete multipart upload
       setState(prev => ({ ...prev, speed: 'Finalizando...' }));
-
-      const { data: finalData, error: finalError } = await supabase.functions.invoke('finalize-video-upload', {
-        body: {
-          upload_id: uploadId,
-          total_chunks: totalChunks,
-          final_path: filePath,
-          content_type: file.type,
+      await s3ClientRef.current!.send(new CompleteMultipartUploadCommand({
+        Bucket: BUCKET,
+        Key: filePath,
+        UploadId: uploadId,
+        MultipartUpload: {
+          Parts: parts.map(p => ({ PartNumber: p.PartNumber, ETag: p.ETag })),
         },
-      });
+      }));
 
-      if (finalError) {
-        const errMsg = finalError.message || 'Erro na finalização';
-        console.error('Finalize error details:', finalError);
-        throw new Error(`Erro na finalização do vídeo: ${errMsg}`);
-      }
-
-      if (finalData?.error) {
-        console.error('Finalize data error:', finalData.error);
-        throw new Error(`Erro ao montar arquivo final: ${finalData.error}`);
-      }
+      console.log(`S3 multipart completed: ${filePath}, size: ${file.size}`);
+      s3UploadIdRef.current = null;
+      s3ClientRef.current = null;
+      filePathRef.current = null;
 
       setState(prev => ({ ...prev, status: 'completed', progress: 100, filePath }));
       toast({ title: 'Upload concluído', description: 'O vídeo foi enviado com sucesso.' });
@@ -206,12 +251,13 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
     } catch (err: unknown) {
       if (cancelledRef.current) return;
-      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      const message = err instanceof Error ? err.message : 'Erro desconhecido no upload';
       console.error('Upload error:', err);
+      await abortS3Upload();
       setState(prev => ({ ...prev, status: 'error', error: message }));
       toast({ title: 'Erro no upload', description: message, variant: 'destructive' });
     }
-  }, [waitIfPaused]);
+  }, [waitIfPaused, abortS3Upload]);
 
   const pauseUpload = useCallback(() => {
     pausedRef.current = true;
@@ -227,16 +273,16 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     toast({ title: 'Upload retomado' });
   }, []);
 
-  const cancelUpload = useCallback(() => {
+  const cancelUpload = useCallback(async () => {
     cancelledRef.current = true;
     pausedRef.current = false;
     resumeResolverRef.current?.();
     resumeResolverRef.current = null;
-    uploadIdRef.current = null;
+    await abortS3Upload();
     onCompleteRef.current = null;
     setState(initialState);
     toast({ title: 'Upload cancelado' });
-  }, []);
+  }, [abortS3Upload]);
 
   return (
     <UploadContext.Provider value={{ upload: state, startUpload, pauseUpload, resumeUpload, cancelUpload, registerOnComplete }}>
