@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { S3Client, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand } from "https://esm.sh/@aws-sdk/client-s3@3.540.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,6 +22,7 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { upload_id, total_chunks, final_path, content_type } = await req.json();
@@ -34,52 +36,45 @@ Deno.serve(async (req) => {
 
     console.log(`Finalizing upload ${upload_id}: ${total_chunks} chunks -> ${final_path}`);
 
-    // --- S3 Multipart Upload via Supabase Storage S3 endpoint ---
-    const s3Endpoint = `${supabaseUrl}/storage/v1/s3`;
-    const bucket = 'videos';
+    // Extract project ref from URL (e.g. https://abc.supabase.co -> abc)
+    const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
 
-    // Helper to make S3-like requests with service role auth
-    const s3Fetch = async (path: string, options: RequestInit = {}) => {
-      const headers = new Headers(options.headers || {});
-      headers.set('Authorization', `Bearer ${supabaseServiceKey}`);
-      return fetch(`${s3Endpoint}${path}`, { ...options, headers });
-    };
-
-    // 1. Initiate multipart upload
-    const initRes = await s3Fetch(`/${bucket}/${final_path}?uploads`, {
-      method: 'POST',
-      headers: { 'Content-Type': content_type || 'video/mp4' },
+    // Use S3 client with session token auth (Supabase S3 protocol)
+    // accessKeyId = project_ref, secretAccessKey = anon_key, sessionToken = service_role JWT
+    const s3Client = new S3Client({
+      forcePathStyle: true,
+      region: 'us-east-1',
+      endpoint: `${supabaseUrl}/storage/v1/s3`,
+      credentials: {
+        accessKeyId: projectRef,
+        secretAccessKey: supabaseAnonKey,
+        sessionToken: supabaseServiceKey,
+      },
     });
 
-    if (!initRes.ok) {
-      const errText = await initRes.text();
-      console.error('S3 initiate multipart error:', initRes.status, errText);
-      return new Response(
-        JSON.stringify({ error: `Failed to initiate multipart upload: ${errText}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const bucket = 'videos';
 
-    const initXml = await initRes.text();
-    // Parse UploadId from XML response
-    const uploadIdMatch = initXml.match(/<UploadId>(.+?)<\/UploadId>/);
-    if (!uploadIdMatch) {
-      console.error('Failed to parse UploadId from:', initXml);
-      return new Response(
-        JSON.stringify({ error: 'Failed to parse multipart UploadId' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // 1. Initiate multipart upload
+    console.log('Initiating S3 multipart upload...');
+    const createCmd = new CreateMultipartUploadCommand({
+      Bucket: bucket,
+      Key: final_path,
+      ContentType: content_type || 'video/mp4',
+    });
+    const createRes = await s3Client.send(createCmd);
+    const s3UploadId = createRes.UploadId;
+
+    if (!s3UploadId) {
+      throw new Error('Failed to get S3 UploadId');
     }
-    const s3UploadId = uploadIdMatch[1];
     console.log(`S3 multipart initiated, UploadId: ${s3UploadId}`);
 
-    // 2. Upload each chunk as a part (one at a time to save memory)
+    // 2. Upload each chunk as a part
     const parts: Array<{ PartNumber: number; ETag: string }> = [];
     let totalSize = 0;
 
     for (let i = 0; i < total_chunks; i++) {
       const chunkPath = `temp/${upload_id}/chunk_${String(i).padStart(5, '0')}.bin`;
-
       console.log(`Processing chunk ${i + 1}/${total_chunks}: ${chunkPath}`);
 
       // Download chunk from temp storage
@@ -90,70 +85,64 @@ Deno.serve(async (req) => {
       if (dlError || !chunkData) {
         console.error(`Error downloading chunk ${i}:`, dlError);
         // Abort the multipart upload
-        await s3Fetch(`/${bucket}/${final_path}?uploadId=${encodeURIComponent(s3UploadId)}`, {
-          method: 'DELETE',
-        });
+        await s3Client.send(new AbortMultipartUploadCommand({
+          Bucket: bucket,
+          Key: final_path,
+          UploadId: s3UploadId,
+        }));
         return new Response(
-          JSON.stringify({ error: `Failed to download chunk ${i}: ${dlError?.message}` }),
+          JSON.stringify({ error: `Falha ao baixar chunk ${i}: ${dlError?.message}` }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      const chunkBytes = await chunkData.arrayBuffer();
+      const chunkBytes = new Uint8Array(await chunkData.arrayBuffer());
       totalSize += chunkBytes.byteLength;
 
-      // Upload as S3 part (part numbers are 1-indexed)
+      // Upload as S3 part (1-indexed)
       const partNumber = i + 1;
-      const partRes = await s3Fetch(
-        `/${bucket}/${final_path}?partNumber=${partNumber}&uploadId=${encodeURIComponent(s3UploadId)}`,
-        {
-          method: 'PUT',
-          body: chunkBytes,
-          headers: { 'Content-Type': 'application/octet-stream' },
-        }
-      );
+      const uploadPartCmd = new UploadPartCommand({
+        Bucket: bucket,
+        Key: final_path,
+        UploadId: s3UploadId,
+        PartNumber: partNumber,
+        Body: chunkBytes,
+      });
 
-      if (!partRes.ok) {
-        const errText = await partRes.text();
-        console.error(`Error uploading part ${partNumber}:`, errText);
-        await s3Fetch(`/${bucket}/${final_path}?uploadId=${encodeURIComponent(s3UploadId)}`, {
-          method: 'DELETE',
-        });
+      const partRes = await s3Client.send(uploadPartCmd);
+
+      if (!partRes.ETag) {
+        console.error(`No ETag for part ${partNumber}`);
+        await s3Client.send(new AbortMultipartUploadCommand({
+          Bucket: bucket,
+          Key: final_path,
+          UploadId: s3UploadId,
+        }));
         return new Response(
-          JSON.stringify({ error: `Failed to upload part ${partNumber}: ${errText}` }),
+          JSON.stringify({ error: `Falha no upload da parte ${partNumber}` }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      const etag = partRes.headers.get('ETag') || '';
-      parts.push({ PartNumber: partNumber, ETag: etag });
-
-      console.log(`Part ${partNumber}/${total_chunks} uploaded, ETag: ${etag}, size: ${chunkBytes.byteLength}`);
+      parts.push({ PartNumber: partNumber, ETag: partRes.ETag });
+      console.log(`Part ${partNumber}/${total_chunks} uploaded, ETag: ${partRes.ETag}, size: ${chunkBytes.byteLength}`);
     }
 
     // 3. Complete multipart upload
-    const completeXml = `<CompleteMultipartUpload>${parts.map(p =>
-      `<Part><PartNumber>${p.PartNumber}</PartNumber><ETag>${p.ETag}</ETag></Part>`
-    ).join('')}</CompleteMultipartUpload>`;
+    console.log('Completing multipart upload...');
+    const completeCmd = new CompleteMultipartUploadCommand({
+      Bucket: bucket,
+      Key: final_path,
+      UploadId: s3UploadId,
+      MultipartUpload: {
+        Parts: parts.map(p => ({
+          PartNumber: p.PartNumber,
+          ETag: p.ETag,
+        })),
+      },
+    });
 
-    const completeRes = await s3Fetch(
-      `/${bucket}/${final_path}?uploadId=${encodeURIComponent(s3UploadId)}`,
-      {
-        method: 'POST',
-        body: completeXml,
-        headers: { 'Content-Type': 'application/xml' },
-      }
-    );
-
-    if (!completeRes.ok) {
-      const errText = await completeRes.text();
-      console.error('Error completing multipart:', errText);
-      return new Response(
-        JSON.stringify({ error: `Failed to complete multipart upload: ${errText}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
+    await s3Client.send(completeCmd);
     console.log(`S3 multipart completed for ${final_path}, total size: ${totalSize} bytes`);
 
     // 4. Clean up temp chunks
@@ -177,7 +166,7 @@ Deno.serve(async (req) => {
     );
   } catch (error: unknown) {
     console.error('Unexpected error:', error);
-    const message = error instanceof Error ? error.message : 'Internal server error';
+    const message = error instanceof Error ? error.message : 'Erro interno do servidor';
     return new Response(
       JSON.stringify({ error: message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

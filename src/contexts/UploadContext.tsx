@@ -190,11 +190,14 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (finalError) {
-        throw new Error(finalError.message || 'Erro na finalização');
+        const errMsg = finalError.message || 'Erro na finalização';
+        console.error('Finalize error details:', finalError);
+        throw new Error(`Erro na finalização do vídeo: ${errMsg}`);
       }
 
       if (finalData?.error) {
-        throw new Error(finalData.error);
+        console.error('Finalize data error:', finalData.error);
+        throw new Error(`Erro ao montar arquivo final: ${finalData.error}`);
       }
 
       setState(prev => ({ ...prev, status: 'completed', progress: 100, filePath }));
