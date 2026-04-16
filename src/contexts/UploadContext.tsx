@@ -36,7 +36,8 @@ const initialState: UploadState = {
 
 const UploadContext = createContext<UploadContextType | null>(null);
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const PROJECT_REF = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+const TUS_ENDPOINT = `https://${PROJECT_REF}.storage.supabase.co/storage/v1/upload/resumable`;
 const CHUNK_SIZE = 50 * 1024 * 1024; // 50MB
 
 export function UploadProvider({ children }: { children: React.ReactNode }) {
