@@ -89,7 +89,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     lastProgressRef.current = { bytes: 0, time: Date.now() };
 
     const upload = new tus.Upload(file, {
-      endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
+      endpoint: TUS_ENDPOINT,
       retryDelays: [0, 3000, 6000, 12000, 24000],
       chunkSize: CHUNK_SIZE,
       uploadDataDuringCreation: true,
