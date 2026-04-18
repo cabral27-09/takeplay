@@ -100,7 +100,6 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       removeFingerprintOnSuccess: true,
       headers: {
         authorization: `Bearer ${session.access_token}`,
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         'x-upsert': 'true',
       },
       metadata: {
@@ -111,9 +110,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       },
       onBeforeRequest: async (req) => {
         const { data: { session: freshSession } } = await supabase.auth.getSession();
-        if (freshSession) {
+        if (freshSession?.access_token) {
           req.setHeader('Authorization', `Bearer ${freshSession.access_token}`);
-          req.setHeader('apikey', import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
         }
       },
       onProgress: (bytesUploaded: number, bytesTotal: number) => {
@@ -155,13 +153,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
     tusUploadRef.current = upload;
 
-    // Check for previous uploads to resume
-    const previousUploads = await upload.findPreviousUploads();
-    if (previousUploads.length > 0) {
-      console.log('Resuming previous TUS upload');
-      upload.resumeFromPreviousUpload(previousUploads[0]);
-    }
-
+    // NÃO retomar uploads anteriores — fingerprints antigos restauram URLs com JWT expirado
+    // causando "Invalid Compact JWS". Sempre criar upload novo.
     upload.start();
   }, []);
 
