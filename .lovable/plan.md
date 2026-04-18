@@ -1,29 +1,53 @@
 
 
-## Diagnóstico do erro real
+## Diagnóstico real (finalmente)
 
-A documentação oficial do Supabase exige **`chunkSize: 6MB exatamente`** para uploads TUS. Usar 50MB faz o storage rejeitar com erro confuso `AccessDenied / Unauthorized: Compact JWS` (que parece erro de auth, mas é validação de chunk).
+Inspecionei o JWT que está sendo enviado nas requests (network logs) e o banco:
 
-Erro do print mostra:
-- `response code: 400`
-- `{"statusCode":"403","code":"AccessDenied","error":"Unauthorized: Compact JWS"}`
+**JWT atual do usuário logado:**
+```json
+{
+  "email": "paulo_snt12@hotmail.com",
+  "user_metadata": { "role": "viewer" },
+  "sub": "0658d242-a4c2-4567-8067-bace5f0fcc6c"
+}
+```
 
-Esse erro acontece porque o serviço de storage bloqueia chunks fora do tamanho esperado.
+**Política RLS do bucket `videos` (INSERT):**
+```sql
+bucket_id = 'videos' AND (
+  has_role(auth.uid(), 'admin') OR 
+  has_role(auth.uid(), 'producer')
+)
+```
 
-## Correção
+O usuário **não tem role admin nem producer** na tabela `user_roles`. Por isso o storage rejeita o upload.
 
-**Arquivo:** `src/contexts/UploadContext.tsx`
+## Por que o erro parecia ser de JWT
 
-1. Trocar `CHUNK_SIZE = 50 * 1024 * 1024` por `CHUNK_SIZE = 6 * 1024 * 1024` (6MB, valor obrigatório do Supabase)
-2. Garantir que o `endpoint` use o hostname direto `storage.supabase.co` (já está correto no código)
-3. Forçar refresh do token ANTES de iniciar o upload (não só no `onBeforeRequest`), para garantir que a primeira request POST de criação use um JWT fresco
-4. Adicionar log do endpoint final no console na inicialização para confirmar que o `PROJECT_REF` está sendo lido corretamente em runtime
+O Supabase Storage retorna a mensagem genérica `"Invalid Compact JWS"` para várias falhas de autorização, incluindo quando o JWT é válido mas a RLS nega a operação. Isso desviou todas as tentativas anteriores (chunk size, apikey, refresh, fingerprints) — nada disso era o problema. O código TUS está correto desde a última revisão.
 
-## Impacto na performance
+## Verificação necessária
 
-Com chunks de 6MB para um arquivo de 2.4GB serão ~400 partes em vez de ~48. Isso é normal e esperado pelo Supabase — o protocolo TUS é otimizado para isso e o overhead por request é mínimo. Continua suportando resume nativo se a conexão cair.
+Preciso confirmar com você qual conta deveria fazer este upload, porque há dois caminhos possíveis:
 
-## Por que o erro parecia ser de URL/auth
+**Opção A — Conta errada:** Você fez login com uma conta `viewer` por engano. A solução é fazer logout e entrar com uma conta admin/producer existente.
 
-O Supabase Storage retorna `AccessDenied / Compact JWS` para vários tipos de erro de validação além de auth real, incluindo chunk size inválido. Isso desviou o diagnóstico anterior.
+**Opção B — Conta certa, role faltando:** A conta `paulo_snt12@hotmail.com` deveria ter role `admin` ou `producer`, mas não tem. Solução: rodar uma migration adicionando a role.
+
+## Plano de correção
+
+1. Confirmar com você qual é o caso (pergunta abaixo)
+2. Se for **Opção B**, executar migration:
+   ```sql
+   INSERT INTO public.user_roles (user_id, role)
+   VALUES ('0658d242-a4c2-4567-8067-bace5f0fcc6c', 'admin')
+   ON CONFLICT DO NOTHING;
+   ```
+3. Você faz logout/login para o novo JWT carregar a role
+4. Tenta o upload de 2.4GB novamente
+
+## Nada a mudar no código
+
+`UploadContext.tsx` está correto. O problema sempre foi de permissão, mascarado pela mensagem de erro enganosa do Supabase Storage.
 
