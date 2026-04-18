@@ -38,7 +38,9 @@ const UploadContext = createContext<UploadContextType | null>(null);
 
 const PROJECT_REF = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 const TUS_ENDPOINT = `https://${PROJECT_REF}.storage.supabase.co/storage/v1/upload/resumable`;
-const CHUNK_SIZE = 50 * 1024 * 1024; // 50MB
+const CHUNK_SIZE = 6 * 1024 * 1024; // 6MB - obrigatório pelo Supabase TUS
+
+console.log('[Upload] TUS endpoint:', TUS_ENDPOINT, '| chunk:', CHUNK_SIZE);
 
 export function UploadProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<UploadState>(initialState);
