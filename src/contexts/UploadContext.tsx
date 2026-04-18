@@ -65,6 +65,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Força refresh do token antes de iniciar para garantir JWT fresco na criação do upload
+    await supabase.auth.refreshSession();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       toast({ title: 'Não autenticado', description: 'Faça login para enviar vídeos.', variant: 'destructive' });
