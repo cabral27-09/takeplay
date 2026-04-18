@@ -100,6 +100,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       removeFingerprintOnSuccess: true,
       headers: {
         authorization: `Bearer ${session.access_token}`,
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         'x-upsert': 'true',
       },
       metadata: {
@@ -109,10 +110,10 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         cacheControl: '3600',
       },
       onBeforeRequest: async (req) => {
-        // Refresh token before each request to avoid expiration
         const { data: { session: freshSession } } = await supabase.auth.getSession();
         if (freshSession) {
           req.setHeader('Authorization', `Bearer ${freshSession.access_token}`);
+          req.setHeader('apikey', import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
         }
       },
       onProgress: (bytesUploaded: number, bytesTotal: number) => {
