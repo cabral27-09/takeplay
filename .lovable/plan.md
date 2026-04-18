@@ -1,43 +1,29 @@
 
 
-## Correção: URL do endpoint TUS
+## Diagnóstico do erro real
 
-### Problema
-O código atual usa:
-```
-https://frakvusemijynkcfsywj.supabase.co/storage/v1/upload/resumable
-```
+A documentação oficial do Supabase exige **`chunkSize: 6MB exatamente`** para uploads TUS. Usar 50MB faz o storage rejeitar com erro confuso `AccessDenied / Unauthorized: Compact JWS` (que parece erro de auth, mas é validação de chunk).
 
-A documentação oficial do Supabase exige o **hostname direto do storage**:
-```
-https://frakvusemijynkcfsywj.storage.supabase.co/storage/v1/upload/resumable
-```
+Erro do print mostra:
+- `response code: 400`
+- `{"statusCode":"403","code":"AccessDenied","error":"Unauthorized: Compact JWS"}`
 
-O gateway da API (`supabase.co`) rejeita o JWT com "Invalid Compact JWS" porque o proxy Kong processa a autenticação de forma diferente do endpoint direto de storage.
+Esse erro acontece porque o serviço de storage bloqueia chunks fora do tamanho esperado.
 
-### Correção
+## Correção
 
 **Arquivo:** `src/contexts/UploadContext.tsx`
 
-1. Extrair o project ref da URL do Supabase
-2. Construir o endpoint TUS correto usando `https://{projectRef}.storage.supabase.co/storage/v1/upload/resumable`
+1. Trocar `CHUNK_SIZE = 50 * 1024 * 1024` por `CHUNK_SIZE = 6 * 1024 * 1024` (6MB, valor obrigatório do Supabase)
+2. Garantir que o `endpoint` use o hostname direto `storage.supabase.co` (já está correto no código)
+3. Forçar refresh do token ANTES de iniciar o upload (não só no `onBeforeRequest`), para garantir que a primeira request POST de criação use um JWT fresco
+4. Adicionar log do endpoint final no console na inicialização para confirmar que o `PROJECT_REF` está sendo lido corretamente em runtime
 
-```typescript
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const PROJECT_REF = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-// Endpoint direto do storage (obrigatório para TUS)
-const TUS_ENDPOINT = `https://${PROJECT_REF}.storage.supabase.co/storage/v1/upload/resumable`;
-```
+## Impacto na performance
 
-E na criação do upload TUS, trocar:
-```typescript
-// DE:
-endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
-// PARA:
-endpoint: TUS_ENDPOINT,
-```
+Com chunks de 6MB para um arquivo de 2.4GB serão ~400 partes em vez de ~48. Isso é normal e esperado pelo Supabase — o protocolo TUS é otimizado para isso e o overhead por request é mínimo. Continua suportando resume nativo se a conexão cair.
 
-### Nenhuma outra alteração necessária
-- As políticas RLS do bucket `videos` já permitem upload para admin e producer
-- O resto da configuração TUS (headers, metadata, callbacks) está correto
+## Por que o erro parecia ser de URL/auth
+
+O Supabase Storage retorna `AccessDenied / Compact JWS` para vários tipos de erro de validação além de auth real, incluindo chunk size inválido. Isso desviou o diagnóstico anterior.
 
