@@ -1,53 +1,33 @@
 
 
-## Diagnóstico real (finalmente)
+## Diagnóstico final
 
-Inspecionei o JWT que está sendo enviado nas requests (network logs) e o banco:
+Confirmei no banco: o usuário JÁ TEM as 3 roles (`viewer`, `admin`, `producer`). As policies do bucket `videos` permitem upload para admin/producer. Então **não é problema de permissão**.
 
-**JWT atual do usuário logado:**
-```json
-{
-  "email": "paulo_snt12@hotmail.com",
-  "user_metadata": { "role": "viewer" },
-  "sub": "0658d242-a4c2-4567-8067-bace5f0fcc6c"
-}
-```
+O bug real está em `src/contexts/UploadContext.tsx`:
 
-**Política RLS do bucket `videos` (INSERT):**
-```sql
-bucket_id = 'videos' AND (
-  has_role(auth.uid(), 'admin') OR 
-  has_role(auth.uid(), 'producer')
-)
-```
+### Problema 1: Header `authorization` lowercase
+Na config inicial do TUS (linha 102) está `authorization` em minúsculo. O Supabase é case-sensitive aqui em alguns casos e o tus-js-client trata o objeto inicial como literal — quando o `onBeforeRequest` (linha 114) sobrescreve com `Authorization` (maiúsculo), pode resultar em **dois headers duplicados** (`authorization` + `Authorization`), e o backend do Supabase Storage rejeita pegando o errado/vazio → "Invalid Compact JWS".
 
-O usuário **não tem role admin nem producer** na tabela `user_roles`. Por isso o storage rejeita o upload.
+### Problema 2: `onBeforeRequest` é assíncrono mas o tus-js-client não aguarda corretamente em todos os casos
+A primeira request POST (criação) pode sair com o token original do `headers:` antes do `onBeforeRequest` rodar. Se houver qualquer corrupção (header duplicado), falha.
 
-## Por que o erro parecia ser de JWT
-
-O Supabase Storage retorna a mensagem genérica `"Invalid Compact JWS"` para várias falhas de autorização, incluindo quando o JWT é válido mas a RLS nega a operação. Isso desviou todas as tentativas anteriores (chunk size, apikey, refresh, fingerprints) — nada disso era o problema. O código TUS está correto desde a última revisão.
-
-## Verificação necessária
-
-Preciso confirmar com você qual conta deveria fazer este upload, porque há dois caminhos possíveis:
-
-**Opção A — Conta errada:** Você fez login com uma conta `viewer` por engano. A solução é fazer logout e entrar com uma conta admin/producer existente.
-
-**Opção B — Conta certa, role faltando:** A conta `paulo_snt12@hotmail.com` deveria ter role `admin` ou `producer`, mas não tem. Solução: rodar uma migration adicionando a role.
+### Problema 3: Falta o header `apikey`
+Apesar da remoção anterior, o endpoint `https://<ref>.storage.supabase.co/storage/v1/upload/resumable` **exige** o header `apikey` com a anon key. Sem isso, o gateway do Supabase rejeita antes mesmo de validar o JWT, retornando o mesmo erro genérico "Invalid Compact JWS".
 
 ## Plano de correção
 
-1. Confirmar com você qual é o caso (pergunta abaixo)
-2. Se for **Opção B**, executar migration:
-   ```sql
-   INSERT INTO public.user_roles (user_id, role)
-   VALUES ('0658d242-a4c2-4567-8067-bace5f0fcc6c', 'admin')
-   ON CONFLICT DO NOTHING;
-   ```
-3. Você faz logout/login para o novo JWT carregar a role
-4. Tenta o upload de 2.4GB novamente
+**Arquivo:** `src/contexts/UploadContext.tsx`
 
-## Nada a mudar no código
+1. Remover o header `authorization` minúsculo do objeto `headers` inicial. Deixar SOMENTE `x-upsert` ali.
+2. Mover toda a lógica de auth para `onBeforeRequest`, setando **`Authorization`** (maiúsculo) E **`apikey`** com `VITE_SUPABASE_PUBLISHABLE_KEY` em TODA request.
+3. Garantir que o `onBeforeRequest` retorna uma Promise resolvida corretamente (já é async, ok).
+4. Adicionar log dentro do `onBeforeRequest` mostrando o método/URL e os primeiros 20 chars do token, para confirmar no console que cada request leva o JWT certo.
+5. Manter `removeFingerprintOnSuccess: true` e NÃO chamar `findPreviousUploads()` (já está correto).
 
-`UploadContext.tsx` está correto. O problema sempre foi de permissão, mascarado pela mensagem de erro enganosa do Supabase Storage.
+### Resultado esperado
+A primeira request POST de criação vai sair com `Authorization: Bearer <jwt>` + `apikey: <anon>`, sem header duplicado, e o Supabase Storage vai aceitar.
+
+### Se ainda falhar após isso
+Próximo passo seria limpar manualmente `localStorage` (chaves começando com `tus::`) — vou orientar você a fazer isso também antes do teste.
 
