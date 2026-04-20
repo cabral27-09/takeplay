@@ -99,7 +99,6 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       uploadDataDuringCreation: true,
       removeFingerprintOnSuccess: true,
       headers: {
-        authorization: `Bearer ${session.access_token}`,
         'x-upsert': 'true',
       },
       metadata: {
@@ -110,8 +109,13 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       },
       onBeforeRequest: async (req) => {
         const { data: { session: freshSession } } = await supabase.auth.getSession();
-        if (freshSession?.access_token) {
-          req.setHeader('Authorization', `Bearer ${freshSession.access_token}`);
+        const token = freshSession?.access_token;
+        if (token) {
+          req.setHeader('Authorization', `Bearer ${token}`);
+          req.setHeader('apikey', import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+          console.log('[TUS] req', req.getMethod(), req.getURL(), 'jwt:', token.slice(0, 20) + '...');
+        } else {
+          console.warn('[TUS] no session token available for request');
         }
       },
       onProgress: (bytesUploaded: number, bytesTotal: number) => {
