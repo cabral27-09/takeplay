@@ -1,33 +1,72 @@
 
+## Problema real
 
-## Diagnóstico final
+O erro mudou de `Invalid Compact JWS` para `Maximum size exceeded`, e isso muda o diagnóstico:
 
-Confirmei no banco: o usuário JÁ TEM as 3 roles (`viewer`, `admin`, `producer`). As policies do bucket `videos` permitem upload para admin/producer. Então **não é problema de permissão**.
+- o upload falha em **0%**, no `POST /storage/v1/upload/resumable`
+- isso significa que o servidor está rejeitando a **criação do upload antes de enviar qualquer chunk**
+- portanto, o problema atual não é JWT nem TUS chunking; é **limite ativo de storage**
 
-O bug real está em `src/contexts/UploadContext.tsx`:
+O código e o repositório dizem “até 6GB”, mas há inconsistência:
 
-### Problema 1: Header `authorization` lowercase
-Na config inicial do TUS (linha 102) está `authorization` em minúsculo. O Supabase é case-sensitive aqui em alguns casos e o tus-js-client trata o objeto inicial como literal — quando o `onBeforeRequest` (linha 114) sobrescreve com `Authorization` (maiúsculo), pode resultar em **dois headers duplicados** (`authorization` + `Authorization`), e o backend do Supabase Storage rejeita pegando o errado/vazio → "Invalid Compact JWS".
+- `supabase/config.toml` define `file_size_limit = "6GiB"`
+- há migrations que tentam subir o bucket `videos` para `6442450944`
+- porém o backend em produção claramente ainda está aplicando um limite menor
+- no front, `UploadContext.tsx` ainda valida **5GB**, enquanto a UI mostra **6GB**
 
-### Problema 2: `onBeforeRequest` é assíncrono mas o tus-js-client não aguarda corretamente em todos os casos
-A primeira request POST (criação) pode sair com o token original do `headers:` antes do `onBeforeRequest` rodar. Se houver qualquer corrupção (header duplicado), falha.
+## O que será corrigido
 
-### Problema 3: Falta o header `apikey`
-Apesar da remoção anterior, o endpoint `https://<ref>.storage.supabase.co/storage/v1/upload/resumable` **exige** o header `apikey` com a anon key. Sem isso, o gateway do Supabase rejeita antes mesmo de validar o JWT, retornando o mesmo erro genérico "Invalid Compact JWS".
+### 1. Confirmar e alinhar o limite real do backend
+Verificar o limite que está ativo agora no backend para storage:
+- limite global de arquivo
+- limite do bucket `videos`
+- mime types permitidos do bucket
 
-## Plano de correção
+Se o bucket ou o limite global estiver abaixo de 2.4GB/6GB, aplicar correção no backend para deixar tudo consistente com o produto:
+- bucket `videos` com limite de 6GB
+- limite global compatível com 6GB ou maior
 
-**Arquivo:** `src/contexts/UploadContext.tsx`
+### 2. Corrigir a inconsistência do front-end
+Atualizar `src/contexts/UploadContext.tsx` para usar o mesmo limite oficial do produto:
+- trocar validação local de **5GB** para **6GB**
+- manter `chunkSize` em `6 * 1024 * 1024`
+- manter o endpoint direto de storage e o fluxo TUS atual
 
-1. Remover o header `authorization` minúsculo do objeto `headers` inicial. Deixar SOMENTE `x-upsert` ali.
-2. Mover toda a lógica de auth para `onBeforeRequest`, setando **`Authorization`** (maiúsculo) E **`apikey`** com `VITE_SUPABASE_PUBLISHABLE_KEY` em TODA request.
-3. Garantir que o `onBeforeRequest` retorna uma Promise resolvida corretamente (já é async, ok).
-4. Adicionar log dentro do `onBeforeRequest` mostrando o método/URL e os primeiros 20 chars do token, para confirmar no console que cada request leva o JWT certo.
-5. Manter `removeFingerprintOnSuccess: true` e NÃO chamar `findPreviousUploads()` (já está correto).
+### 3. Unificar a mensagem para o usuário
+Revisar os pontos que exibem “máx. 6GB” para garantir que todos os lugares reflitam o mesmo limite:
+- `src/components/admin/VideoUploader.tsx`
+- mensagens de erro/toast do upload
+- qualquer texto de plano/benefício que mencione tamanho máximo
 
-### Resultado esperado
-A primeira request POST de criação vai sair com `Authorization: Bearer <jwt>` + `apikey: <anon>`, sem header duplicado, e o Supabase Storage vai aceitar.
+### 4. Evitar falsos diagnósticos futuros
+Melhorar o tratamento do erro no upload para distinguir:
+- erro de autenticação
+- erro de permissão
+- erro de limite de tamanho
+- erro genérico do TUS
 
-### Se ainda falhar após isso
-Próximo passo seria limpar manualmente `localStorage` (chaves começando com `tus::`) — vou orientar você a fazer isso também antes do teste.
+Assim, se o backend voltar a responder `Maximum size exceeded`, a interface mostrará um motivo claro em vez de parecer bug de upload.
 
+## Arquivos envolvidos
+
+- `src/contexts/UploadContext.tsx`
+- `src/components/admin/VideoUploader.tsx`
+- `src/components/producer/UploadGate.tsx` ou outros textos de plano
+- `supabase/config.toml`
+- migrations de storage já existentes em `supabase/migrations/`
+
+## Resultado esperado
+
+Depois da correção:
+- vídeos grandes não devem falhar imediatamente em 0%
+- um arquivo de **2.4GB** deve conseguir iniciar normalmente o upload
+- o limite exibido na UI, validado no cliente e aplicado no backend ficará consistente em **6GB**
+
+## Detalhes técnicos
+
+- `Maximum size exceeded` no `POST /upload/resumable` indica rejeição pelo **limite de storage no servidor**, antes do envio dos chunks
+- `chunkSize` de 6MB continua correto para TUS
+- a divergência atual é:
+  - backend/documentação do projeto: 6GB
+  - validação local em `UploadContext`: 5GB
+- além do limite por bucket, existe também a possibilidade de um **limite global ativo** estar menor que o esperado; ambos precisam ficar alinhados
