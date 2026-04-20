@@ -149,7 +149,15 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       onError: (error: Error) => {
         console.error('TUS upload error:', error);
         tusUploadRef.current = null;
-        const message = error.message || 'Erro desconhecido no upload';
+        const raw = error.message || 'Erro desconhecido no upload';
+        let message = raw;
+        if (/maximum size exceeded/i.test(raw)) {
+          message = 'O arquivo excede o limite máximo permitido pelo servidor (atualmente menor que 6GB). O administrador precisa aumentar o limite global de upload no painel Supabase Storage Settings.';
+        } else if (/invalid compact jws|jwt|unauthorized|403/i.test(raw)) {
+          message = 'Sessão expirada ou sem permissão. Faça logout/login e tente novamente.';
+        } else if (/network|failed to fetch/i.test(raw)) {
+          message = 'Falha de rede durante o upload. Verifique sua conexão e tente novamente.';
+        }
         setState(prev => ({ ...prev, status: 'error', error: message }));
         toast({ title: 'Erro no upload', description: message, variant: 'destructive' });
       },
