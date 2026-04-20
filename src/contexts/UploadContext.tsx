@@ -59,9 +59,9 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       toast({ title: 'Formato inválido', description: 'Use MP4, WebM ou MOV.', variant: 'destructive' });
       return;
     }
-    const maxSize = 5 * 1024 * 1024 * 1024; // 5GB for TUS
+    const maxSize = 6 * 1024 * 1024 * 1024; // 6GB
     if (file.size > maxSize) {
-      toast({ title: 'Arquivo muito grande', description: 'O limite máximo é 5GB.', variant: 'destructive' });
+      toast({ title: 'Arquivo muito grande', description: 'O limite máximo é 6GB.', variant: 'destructive' });
       return;
     }
 
