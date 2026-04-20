@@ -26,14 +26,14 @@ Deno.serve(async (req) => {
 
     const supabaseAuth = createClient(SUPABASE_URL, ANON_KEY);
     const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: authErr } = await supabaseAuth.auth.getClaims(token);
-    if (authErr || !claims?.claims?.sub) {
+    const { data: userData, error: authErr } = await supabaseAuth.auth.getUser(token);
+    if (authErr || !userData?.user?.id) {
       return new Response(JSON.stringify({ error: "Invalid token" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const userId = claims.claims.sub;
+    const userId = userData.user.id;
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
