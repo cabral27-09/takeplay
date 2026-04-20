@@ -1,32 +1,75 @@
 
 
-## Validar que o limite global foi aplicado
+## Voltar o upload para fluxo via Edge Functions do Lovable Cloud
 
-Você ajustou o limite global no painel Storage Settings. Agora o caminho é simplesmente testar e confirmar que o upload de 2.4GB inicia normalmente.
+Confirmado: o caminho que funcionava era enviar chunks para edge functions do projeto, que gravam no bucket `videos`. Vamos restaurar esse fluxo e abandonar o TUS direto do Storage que está sendo bloqueado em 0%.
 
-## O que fazer agora
+## O que será construído
 
-1. **Você** abre `/admin/upload` (ou a página de upload de produtor)
-2. Seleciona o vídeo de 2.4GB novamente
-3. Observa o comportamento:
-   - **Sucesso esperado**: o upload sai de 0% e começa a subir, com progresso e velocidade visíveis
-   - **Se falhar**: copia a mensagem de erro exata e me envia
+### 1. Edge Function `upload-video-chunk`
+Recebe chunks autenticados do navegador e acumula no Storage:
+- Valida JWT via `getClaims` (admin ou producer)
+- Recebe `uploadId`, `chunkIndex`, `totalChunks`, `fileName`, `contentType` e o blob do chunk
+- Grava cada chunk como objeto temporário em `videos/_tmp/<uploadId>/<chunkIndex>.part`
+- Usa service role para escrever no bucket privado
+- Retorna `{ ok: true, received: chunkIndex }`
 
-## Se o upload começar mas falhar no meio
+### 2. Edge Function `finalize-video-upload`
+Monta o arquivo final:
+- Valida JWT e papel
+- Lê todos os chunks de `_tmp/<uploadId>/`
+- Concatena em ordem e faz upload do arquivo final como `movies/<timestamp>-<rand>.<ext>` no bucket `videos`
+- Apaga a pasta `_tmp/<uploadId>/`
+- Retorna `{ filePath }` no mesmo formato que o `UploadContext` já entrega para os formulários
 
-Possíveis causas e como vou tratar:
-- **Erro de rede/timeout**: o TUS já tem retry configurado (`retryDelays: [0, 3000, 6000, 12000, 24000]`); deve recuperar sozinho
-- **JWT expirando durante upload longo**: o `onBeforeRequest` já busca sessão fresca a cada chunk
-- **Erro novo desconhecido**: vou inspecionar `network logs` e `edge function logs` para diagnosticar
+### 3. Refatorar `src/contexts/UploadContext.tsx`
+Trocar o cliente TUS por loop de chunks próprio:
+- `chunkSize`: 5 MB (seguro pro limite de payload de edge function)
+- Para cada chunk: `supabase.functions.invoke('upload-video-chunk', { body: FormData })` com retry exponencial
+- Atualiza `progress`, `speed` e `fileName` igual hoje
+- Pausa = parar o loop após o chunk atual; Retomar = continuar do próximo `chunkIndex`
+- Cancelar = parar e chamar `finalize-video-upload` com flag `abort` (ou nova função `cancel-video-upload`) para limpar `_tmp`
+- Ao terminar todos os chunks, chama `finalize-video-upload` e dispara `onCompleteRef.current(filePath)`
+- Mantém validação local de 6GB e tipos MP4/WebM/MOV
+- Mantém `registerOnComplete` para continuar funcionando com `VideoUploader` global
 
-## Se ainda falhar imediatamente em 0% com "Maximum size exceeded"
+### 4. Mensagens de erro
+Substituir o texto atual de "limite global do painel" por mensagens reais do novo fluxo:
+- chunk falhou após retries
+- sessão expirada
+- erro ao finalizar
+- arquivo acima de 6GB (validação local)
 
-Significa que o ajuste no painel não foi salvo ou ainda está abaixo de 2.4GB. Vou orientar você a:
-1. Conferir o valor exato salvo no painel (deve ser `6442450944` bytes ou `6 GB`)
-2. Aguardar ~1 minuto para a config propagar
-3. Tentar novamente
+### 5. `supabase/config.toml`
+Já contém `[functions.upload-video-chunk]` e `[functions.finalize-video-upload]` com `verify_jwt = false`. Nenhuma alteração necessária — JWT é validado em código.
 
-## Sem mudanças de código nesta etapa
+## Arquivos envolvidos
 
-Não há nada a alterar — código, bucket e RLS já estão corretos. Esta etapa é apenas validação do ajuste manual que você acabou de fazer.
+**Backend (novos):**
+- `supabase/functions/upload-video-chunk/index.ts`
+- `supabase/functions/finalize-video-upload/index.ts`
+
+**Frontend (refatorar):**
+- `src/contexts/UploadContext.tsx`
+
+**Sem alteração:**
+- `src/components/admin/VideoUploader.tsx`
+- `src/components/upload/GlobalUploadIndicator.tsx`
+- `src/pages/admin/UploadVideo.tsx`
+- `src/pages/producer/UploadMovie.tsx`
+- bucket `videos`, `get-video-url`, RLS
+
+## Resultado esperado
+
+- Upload de 2.4 GB começa a subir, contornando o bloqueio do endpoint TUS
+- UI global de progresso, pausa e cancelamento continuam idênticas
+- `VideoUploader` recebe `filePath` no mesmo formato → formulários de admin e produtor funcionam sem mudar
+- Produtores seguem com upload ilimitado
+
+## Detalhes técnicos
+
+- Chunks de 5 MB ficam confortavelmente dentro do limite de payload das edge functions e evitam timeouts
+- Acúmulo em `videos/_tmp/<uploadId>/` permite retomar e cancelar com limpeza
+- Concatenação final é feita no servidor com service role e gravada no caminho `movies/...` que `get-video-url` já entende
+- Não dependemos mais do endpoint `/storage/v1/upload/resumable` que está bloqueando os uploads atualmente
 
