@@ -59,9 +59,9 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       toast({ title: 'Formato inválido', description: 'Use MP4, WebM ou MOV.', variant: 'destructive' });
       return;
     }
-    const maxSize = 5 * 1024 * 1024 * 1024; // 5GB for TUS
+    const maxSize = 6 * 1024 * 1024 * 1024; // 6GB
     if (file.size > maxSize) {
-      toast({ title: 'Arquivo muito grande', description: 'O limite máximo é 5GB.', variant: 'destructive' });
+      toast({ title: 'Arquivo muito grande', description: 'O limite máximo é 6GB.', variant: 'destructive' });
       return;
     }
 
@@ -149,7 +149,15 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       onError: (error: Error) => {
         console.error('TUS upload error:', error);
         tusUploadRef.current = null;
-        const message = error.message || 'Erro desconhecido no upload';
+        const raw = error.message || 'Erro desconhecido no upload';
+        let message = raw;
+        if (/maximum size exceeded/i.test(raw)) {
+          message = 'O arquivo excede o limite máximo permitido pelo servidor (atualmente menor que 6GB). O administrador precisa aumentar o limite global de upload no painel Supabase Storage Settings.';
+        } else if (/invalid compact jws|jwt|unauthorized|403/i.test(raw)) {
+          message = 'Sessão expirada ou sem permissão. Faça logout/login e tente novamente.';
+        } else if (/network|failed to fetch/i.test(raw)) {
+          message = 'Falha de rede durante o upload. Verifique sua conexão e tente novamente.';
+        }
         setState(prev => ({ ...prev, status: 'error', error: message }));
         toast({ title: 'Erro no upload', description: message, variant: 'destructive' });
       },
