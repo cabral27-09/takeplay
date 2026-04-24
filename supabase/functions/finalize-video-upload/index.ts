@@ -83,51 +83,108 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Baixa cada chunk em ordem e concatena
-    const parts: Uint8Array[] = [];
-    let totalSize = 0;
-    for (let i = 0; i < totalChunks; i++) {
-      const partPath = `${tmpPrefix}/${String(i).padStart(6, "0")}.part`;
-      const { data, error } = await admin.storage.from("videos").download(partPath);
-      if (error || !data) {
-        console.error("[finalize] missing chunk", i, error);
-        return new Response(JSON.stringify({ error: `Chunk ${i} ausente` }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const buf = new Uint8Array(await data.arrayBuffer());
-      parts.push(buf);
-      totalSize += buf.length;
-    }
-
-    const merged = new Uint8Array(totalSize);
-    let offset = 0;
-    for (const p of parts) {
-      merged.set(p, offset);
-      offset += p.length;
-    }
-
     const ext = String(fileName).split(".").pop() || "mp4";
     const finalPath = `movies/${Date.now()}-${Math.random().toString(36).substring(2)}.${ext}`;
+    const finalContentType = contentType || "video/mp4";
 
-    const { error: upErr } = await admin.storage
+    // Calcula tamanho total a partir da listagem (necessário para Content-Length)
+    const { data: listing, error: listErr } = await admin.storage
       .from("videos")
-      .upload(finalPath, merged, {
-        contentType: contentType || "video/mp4",
-        upsert: false,
-      });
-
-    if (upErr) {
-      console.error("[finalize] upload error", upErr);
-      return new Response(JSON.stringify({ error: upErr.message }), {
+      .list(tmpPrefix, { limit: 10000 });
+    if (listErr || !listing) {
+      console.error("[finalize] list error", listErr);
+      return new Response(JSON.stringify({ error: "Falha ao listar chunks" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    const sizesByName = new Map<string, number>();
+    let totalSize = 0;
+    for (const f of listing) {
+      const sz = (f as any)?.metadata?.size ?? 0;
+      sizesByName.set(f.name, sz);
+      totalSize += sz;
+    }
+
+    // Verifica que todos os chunks esperados estão presentes
+    for (let i = 0; i < totalChunks; i++) {
+      const name = `${String(i).padStart(6, "0")}.part`;
+      if (!sizesByName.has(name)) {
+        console.error("[finalize] missing chunk", name);
+        return new Response(JSON.stringify({ error: `Chunk ${i} ausente` }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    console.log(`[finalize] streaming ${totalChunks} chunks, total=${totalSize} bytes -> ${finalPath}`);
+
+    // Stream que baixa um chunk por vez e libera memória entre chunks
+    let streamErr: any = null;
+    const stream = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        // Vai enfileirar tudo de uma vez via async iteration; usamos start em vez disso
+      },
+      async start(controller) {
+        try {
+          for (let i = 0; i < totalChunks; i++) {
+            const partPath = `${tmpPrefix}/${String(i).padStart(6, "0")}.part`;
+            const { data, error } = await admin.storage.from("videos").download(partPath);
+            if (error || !data) {
+              throw new Error(`Falha ao baixar chunk ${i}: ${error?.message || "sem dados"}`);
+            }
+            // Stream do Blob direto para o controller, sem materializar tudo
+            const reader = data.stream().getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (value) controller.enqueue(value);
+            }
+          }
+          controller.close();
+        } catch (e: any) {
+          streamErr = e;
+          console.error("[finalize] stream error", e);
+          controller.error(e);
+        }
+      },
+    });
+
+    // Upload direto via REST do Storage usando o stream como body
+    const uploadUrl = `${SUPABASE_URL}/storage/v1/object/videos/${finalPath}`;
+    const resp = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SERVICE_ROLE}`,
+        apikey: SERVICE_ROLE,
+        "Content-Type": finalContentType,
+        "Content-Length": String(totalSize),
+        "x-upsert": "false",
+        "cache-control": "3600",
+      },
+      body: stream,
+      // @ts-ignore - Deno fetch suporta duplex
+      duplex: "half",
+    });
+
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => "");
+      console.error("[finalize] storage upload failed", resp.status, txt, streamErr);
+      return new Response(
+        JSON.stringify({ error: `Upload final falhou (${resp.status}): ${txt || streamErr?.message || "erro"}` }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+    await resp.text().catch(() => "");
+
     await cleanup();
 
+    console.log(`[finalize] done ${finalPath} size=${totalSize}`);
     return new Response(JSON.stringify({ filePath: finalPath, size: totalSize }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
