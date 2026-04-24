@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
     console.log(`[finalize] streaming ${totalChunks} chunks, total=${totalSize} bytes -> ${finalPath}`);
 
     // Stream que baixa um chunk por vez e libera memória entre chunks
-    let streamErr: Error | null = null;
+    let streamErr: any = null;
     const stream = new ReadableStream<Uint8Array>({
       async pull(controller) {
         // Vai enfileirar tudo de uma vez via async iteration; usamos start em vez disso
