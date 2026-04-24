@@ -1,35 +1,31 @@
 
 
-## Corrigir validação de JWT nas edge functions de upload
+## Corrigir OOM na finalização do upload (falha em 99%)
 
-### Problema
-`supabaseAuth.auth.getClaims(token)` não existe nessa versão do SDK. Todo chunk retorna 500 e o progresso fica em 0%.
+### Causa raiz
+`finalize-video-upload` carrega todos os chunks num único `Uint8Array` em memória. Para 2.4 GB isso excede o limite de RAM da edge function e mata o processo na concatenação — exatamente quando o frontend chega a 99% e chama o finalize.
 
-### Correção
-Trocar `getClaims` por `getUser(token)` (API estável e disponível) em:
+### Solução: streaming sem buffer total
+Reescrever `finalize-video-upload` para NUNCA materializar o arquivo inteiro:
 
-- `supabase/functions/upload-video-chunk/index.ts`
+1. Construir um `ReadableStream` que itera pelos chunks (`000000.part`, `000001.part`, ...), baixa um por vez do Storage, faz `enqueue` do `Uint8Array` e libera a referência antes de baixar o próximo.
+2. Fazer o upload final via `fetch` direto pro endpoint REST do Storage (`POST /storage/v1/object/videos/movies/<file>`) usando o `ReadableStream` como `body`, com `duplex: 'half'`. Headers: `Authorization: Bearer <SERVICE_ROLE>`, `Content-Type`, `x-upsert: false`.
+3. Após sucesso, deletar a pasta `_tmp/<userId>/<uploadId>/`.
+4. Retornar `{ filePath, size }` no mesmo formato atual.
+
+Isso mantém o pico de memória em ~5MB (1 chunk por vez) em vez de 2.4 GB.
+
+### Arquivo alterado
 - `supabase/functions/finalize-video-upload/index.ts`
 
-Padrão novo:
-
-```ts
-const { data: userData, error: authErr } = await supabaseAuth.auth.getUser(token);
-if (authErr || !userData?.user?.id) {
-  return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: ... });
-}
-const userId = userData.user.id;
-```
-
-### Redeploy
-Ambas as funções serão redeployadas automaticamente.
+### Sem mudança
+- `upload-video-chunk` (já funciona)
+- Frontend (`UploadContext`) — protocolo finalize idêntico
+- Bucket, RLS, `config.toml`
 
 ### Validação
-1. Subir o vídeo de 2.4GB em `/admin/upload`
-2. Confirmar que progresso sai de 0% e avança
-3. Conferir logs de `upload-video-chunk` e `finalize-video-upload` sem erros
-4. Confirmar `filePath` retornado e gravação no bucket `videos/movies/...`
-
-### Sem outras mudanças
-Frontend, bucket, RLS e `config.toml` continuam como estão.
+1. Subir o mesmo vídeo de 2.4 GB
+2. Confirmar progresso até 100% e finalize sem erro
+3. Conferir nos logs `[finalize]` execução sem OOM
+4. Verificar arquivo em `videos/movies/...` e que `_tmp/<uploadId>/` foi limpa
 
