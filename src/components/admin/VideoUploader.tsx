@@ -93,7 +93,7 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
           Clique para fazer upload
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          MP4, WebM ou MOV (máx. 6GB) • Upload resumível
+          MP4, WebM ou MOV (máx. 6GB) • Upload direto em alta velocidade
         </p>
       </label>
 
@@ -125,15 +125,6 @@ export function VideoUploader({ value, onChange, disabled }: VideoUploaderProps)
             </div>
             
             <div className="flex items-center gap-1">
-              {upload.status === 'paused' ? (
-                <Button type="button" variant="default" size="sm" onClick={resumeUpload} className="h-7 px-3">
-                  <Play className="h-3 w-3 mr-1" /> Continuar
-                </Button>
-              ) : (
-                <Button type="button" variant="ghost" size="sm" onClick={pauseUpload} className="h-7 px-2">
-                  <Pause className="h-3 w-3 mr-1" /> Pausar
-                </Button>
-              )}
               <Button type="button" variant="ghost" size="sm" onClick={cancelUpload} className="h-7 px-2 text-destructive hover:text-destructive">
                 <X className="h-3 w-3 mr-1" /> Cancelar
               </Button>
