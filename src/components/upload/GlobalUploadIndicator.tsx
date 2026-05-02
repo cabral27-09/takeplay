@@ -80,15 +80,6 @@ export function GlobalUploadIndicator() {
 
           {isActive && (
             <div className="flex items-center gap-1">
-              {upload.status === 'paused' ? (
-                <Button variant="default" size="sm" className="h-6 px-2 text-xs" onClick={resumeUpload}>
-                  <Play className="h-3 w-3 mr-1" /> Continuar
-                </Button>
-              ) : (
-                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={pauseUpload}>
-                  <Pause className="h-3 w-3 mr-1" /> Pausar
-                </Button>
-              )}
               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive" onClick={cancelUpload}>
                 <X className="h-3 w-3" />
               </Button>
