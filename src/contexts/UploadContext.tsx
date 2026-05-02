@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
+import { S3Client, AbortMultipartUploadCommand } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
@@ -35,150 +37,30 @@ const initialState: UploadState = {
 
 const UploadContext = createContext<UploadContextType | null>(null);
 
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB por chunk
-const MAX_RETRIES = 4;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID as string;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+const BUCKET = 'videos';
+const PART_SIZE = 16 * 1024 * 1024; // 16MB
 
-function makeUploadId() {
-  return `${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
-}
-
-async function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
+function makeKey(file: File) {
+  const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
+  return `movies/${Date.now()}-${Math.random().toString(36).substring(2, 10)}.${ext}`;
 }
 
 export function UploadProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<UploadState>(initialState);
   const onCompleteRef = useRef<((filePath: string) => void) | null>(null);
 
-  // Controle do loop de upload
-  const fileRef = useRef<File | null>(null);
-  const uploadIdRef = useRef<string | null>(null);
-  const nextChunkRef = useRef<number>(0);
-  const totalChunksRef = useRef<number>(0);
-  const pausedRef = useRef<boolean>(false);
+  const uploaderRef = useRef<Upload | null>(null);
+  const s3Ref = useRef<S3Client | null>(null);
   const cancelledRef = useRef<boolean>(false);
-  const runningRef = useRef<boolean>(false);
   const lastProgressRef = useRef({ bytes: 0, time: Date.now() });
+  const currentKeyRef = useRef<string | null>(null);
+  const currentUploadIdRef = useRef<string | null>(null);
 
   const registerOnComplete = useCallback((cb: ((filePath: string) => void) | null) => {
     onCompleteRef.current = cb;
-  }, []);
-
-  const runLoop = useCallback(async () => {
-    if (runningRef.current) return;
-    runningRef.current = true;
-
-    const file = fileRef.current!;
-    const uploadId = uploadIdRef.current!;
-    const totalChunks = totalChunksRef.current;
-
-    try {
-      while (nextChunkRef.current < totalChunks) {
-        if (pausedRef.current || cancelledRef.current) break;
-
-        const i = nextChunkRef.current;
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const blob = file.slice(start, end);
-
-        const form = new FormData();
-        form.append('uploadId', uploadId);
-        form.append('chunkIndex', String(i));
-        form.append('totalChunks', String(totalChunks));
-        form.append('chunk', blob, `${i}.part`);
-
-        let attempt = 0;
-        let lastErr: any = null;
-        while (attempt <= MAX_RETRIES) {
-          if (cancelledRef.current) break;
-          const { data, error } = await supabase.functions.invoke('upload-video-chunk', {
-            body: form,
-          });
-          if (!error && data?.ok) {
-            lastErr = null;
-            break;
-          }
-          lastErr = error || new Error(data?.error || 'Falha no chunk');
-          attempt++;
-          if (attempt > MAX_RETRIES) break;
-          await sleep(1000 * attempt);
-        }
-
-        if (cancelledRef.current) break;
-        if (lastErr) throw lastErr;
-
-        nextChunkRef.current = i + 1;
-
-        // Progresso e velocidade
-        const bytesUploaded = Math.min((i + 1) * CHUNK_SIZE, file.size);
-        const now = Date.now();
-        const dt = (now - lastProgressRef.current.time) / 1000;
-        let speedStr = '';
-        if (dt > 0.5) {
-          const db = bytesUploaded - lastProgressRef.current.bytes;
-          const sp = db / dt;
-          speedStr = sp >= 1024 * 1024
-            ? `${(sp / (1024 * 1024)).toFixed(1)} MB/s`
-            : `${(sp / 1024).toFixed(0)} KB/s`;
-          lastProgressRef.current = { bytes: bytesUploaded, time: now };
-        }
-        const pct = Math.min(99, Math.round((bytesUploaded / file.size) * 100));
-        setState((prev) => ({
-          ...prev,
-          progress: pct,
-          ...(speedStr ? { speed: speedStr } : {}),
-        }));
-      }
-
-      if (cancelledRef.current) {
-        runningRef.current = false;
-        return;
-      }
-
-      if (pausedRef.current) {
-        runningRef.current = false;
-        return;
-      }
-
-      // Finaliza
-      setState((prev) => ({ ...prev, speed: 'Finalizando...' }));
-      const { data, error } = await supabase.functions.invoke('finalize-video-upload', {
-        body: {
-          uploadId,
-          totalChunks,
-          fileName: file.name,
-          contentType: file.type,
-        },
-      });
-
-      if (error || !data?.filePath) {
-        throw error || new Error(data?.error || 'Falha ao finalizar upload');
-      }
-
-      const filePath = data.filePath as string;
-      setState((prev) => ({ ...prev, status: 'completed', progress: 100, filePath, speed: '' }));
-      toast({ title: 'Upload concluído', description: 'O vídeo foi enviado com sucesso.' });
-      onCompleteRef.current?.(filePath);
-    } catch (e: any) {
-      console.error('[Upload] erro', e);
-      const raw = e?.message || 'Erro desconhecido no upload';
-      let message = raw;
-      if (/unauthorized|invalid token|jwt/i.test(raw)) {
-        message = 'Sessão expirada. Faça login novamente e tente outra vez.';
-      } else if (/forbidden/i.test(raw)) {
-        message = 'Sem permissão para enviar vídeos.';
-      } else if (/network|failed to fetch/i.test(raw)) {
-        message = 'Falha de rede durante o upload. Verifique sua conexão.';
-      } else if (/chunk/i.test(raw)) {
-        message = 'Falha ao enviar parte do arquivo após várias tentativas.';
-      } else if (/finaliz/i.test(raw)) {
-        message = 'Falha ao finalizar o vídeo no servidor.';
-      }
-      setState((prev) => ({ ...prev, status: 'error', error: message, speed: '' }));
-      toast({ title: 'Erro no upload', description: message, variant: 'destructive' });
-    } finally {
-      runningRef.current = false;
-    }
   }, []);
 
   const startUpload = useCallback(async (file: File, onComplete?: (filePath: string) => void) => {
@@ -202,13 +84,12 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
     if (onComplete) onCompleteRef.current = onComplete;
 
-    fileRef.current = file;
-    uploadIdRef.current = makeUploadId();
-    nextChunkRef.current = 0;
-    totalChunksRef.current = Math.ceil(file.size / CHUNK_SIZE);
-    pausedRef.current = false;
     cancelledRef.current = false;
     lastProgressRef.current = { bytes: 0, time: Date.now() };
+
+    const key = makeKey(file);
+    currentKeyRef.current = key;
+    currentUploadIdRef.current = null;
 
     setState({
       status: 'uploading',
@@ -220,36 +101,125 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       filePath: null,
     });
 
-    runLoop();
-  }, [runLoop]);
+    // S3 endpoint do Storage. Usa subdomínio storage para melhor performance em arquivos grandes.
+    const endpoint = `https://${SUPABASE_PROJECT_ID}.storage.supabase.co/storage/v1/s3`;
 
+    const s3 = new S3Client({
+      forcePathStyle: true,
+      region: 'us-east-1',
+      endpoint,
+      credentials: {
+        accessKeyId: SUPABASE_PROJECT_ID,
+        secretAccessKey: SUPABASE_PUBLISHABLE_KEY,
+        sessionToken: session.access_token,
+      },
+    });
+    s3Ref.current = s3;
+
+    try {
+      const uploader = new Upload({
+        client: s3,
+        params: {
+          Bucket: BUCKET,
+          Key: key,
+          Body: file,
+          ContentType: file.type || 'video/mp4',
+          CacheControl: '3600',
+        },
+        partSize: PART_SIZE,
+        queueSize: 4,
+        leavePartsOnError: false,
+      });
+
+      uploaderRef.current = uploader;
+
+      // Captura o uploadId quando criado, para poder abortar depois
+      // @ts-ignore - evento interno
+      uploader.on?.('httpUploadProgress', (p: { loaded?: number; total?: number; part?: number; Key?: string; UploadId?: string }) => {
+        if (p.UploadId && !currentUploadIdRef.current) {
+          currentUploadIdRef.current = p.UploadId;
+        }
+        const loaded = p.loaded || 0;
+        const total = p.total || file.size;
+        const now = Date.now();
+        const dt = (now - lastProgressRef.current.time) / 1000;
+        let speedStr = '';
+        if (dt > 0.5) {
+          const db = loaded - lastProgressRef.current.bytes;
+          const sp = db / dt;
+          if (sp > 0) {
+            speedStr = sp >= 1024 * 1024
+              ? `${(sp / (1024 * 1024)).toFixed(1)} MB/s`
+              : `${(sp / 1024).toFixed(0)} KB/s`;
+          }
+          lastProgressRef.current = { bytes: loaded, time: now };
+        }
+        const pct = Math.min(99, Math.round((loaded / total) * 100));
+        setState((prev) => ({
+          ...prev,
+          progress: pct,
+          ...(speedStr ? { speed: speedStr } : {}),
+        }));
+      });
+
+      await uploader.done();
+
+      if (cancelledRef.current) return;
+
+      setState((prev) => ({
+        ...prev,
+        status: 'completed',
+        progress: 100,
+        filePath: key,
+        speed: '',
+      }));
+      toast({ title: 'Upload concluído', description: 'O vídeo foi enviado com sucesso.' });
+      onCompleteRef.current?.(key);
+    } catch (e: any) {
+      if (cancelledRef.current) return;
+      console.error('[Upload] erro', e);
+      const raw = e?.message || e?.name || 'Erro desconhecido no upload';
+      let message = raw;
+      if (/AccessDenied|Forbidden/i.test(raw)) {
+        message = 'Sem permissão para enviar vídeos. Verifique se sua conta tem papel de admin ou produtor.';
+      } else if (/SignatureDoesNotMatch|InvalidAccessKeyId|Unauthorized|jwt/i.test(raw)) {
+        message = 'Sessão expirada. Faça login novamente e tente outra vez.';
+      } else if (/NetworkError|Failed to fetch|network/i.test(raw)) {
+        message = 'Falha de rede durante o upload. Verifique sua conexão e tente novamente.';
+      }
+      setState((prev) => ({ ...prev, status: 'error', error: message, speed: '' }));
+      toast({ title: 'Erro no upload', description: message, variant: 'destructive' });
+    } finally {
+      uploaderRef.current = null;
+    }
+  }, []);
+
+  // Pausar/Resumir não é suportado de forma confiável neste fluxo; manter o status atual.
   const pauseUpload = useCallback(() => {
-    if (state.status !== 'uploading') return;
-    pausedRef.current = true;
-    setState((prev) => ({ ...prev, status: 'paused' }));
-    toast({ title: 'Upload pausado' });
-  }, [state.status]);
+    toast({ title: 'Pausa indisponível', description: 'Este upload não pode ser pausado. Aguarde a conclusão ou cancele.' });
+  }, []);
 
   const resumeUpload = useCallback(() => {
-    if (state.status !== 'paused') return;
-    pausedRef.current = false;
-    setState((prev) => ({ ...prev, status: 'uploading' }));
-    toast({ title: 'Upload retomado' });
-    runLoop();
-  }, [state.status, runLoop]);
+    // no-op
+  }, []);
 
   const cancelUpload = useCallback(() => {
     cancelledRef.current = true;
-    pausedRef.current = false;
-    const uploadId = uploadIdRef.current;
-    // Limpeza no servidor (best effort)
-    if (uploadId) {
-      supabase.functions.invoke('finalize-video-upload', {
-        body: { uploadId, abort: true },
-      }).catch(() => {});
+    const uploader = uploaderRef.current;
+    if (uploader) {
+      uploader.abort().catch(() => {});
     }
-    fileRef.current = null;
-    uploadIdRef.current = null;
+    // Aborta multipart no servidor se já tivermos o UploadId
+    const s3 = s3Ref.current;
+    const key = currentKeyRef.current;
+    const uploadId = currentUploadIdRef.current;
+    if (s3 && key && uploadId) {
+      s3.send(new AbortMultipartUploadCommand({ Bucket: BUCKET, Key: key, UploadId: uploadId })).catch(() => {});
+    }
+    uploaderRef.current = null;
+    s3Ref.current = null;
+    currentKeyRef.current = null;
+    currentUploadIdRef.current = null;
     onCompleteRef.current = null;
     setState(initialState);
     toast({ title: 'Upload cancelado' });
