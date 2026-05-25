@@ -150,7 +150,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           CacheControl: '3600',
         },
         partSize: PART_SIZE,
-        queueSize: 4,
+        queueSize: 3,
         leavePartsOnError: false,
       });
 
