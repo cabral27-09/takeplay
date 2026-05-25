@@ -113,7 +113,30 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         secretAccessKey: SUPABASE_PUBLISHABLE_KEY,
         sessionToken: session.access_token,
       },
+      // Supabase S3 não suporta os checksums automáticos do AWS SDK v3 mais novo.
+      // Sem isto, partes são rejeitadas e o multipart é abortado no servidor,
+      // causando "The specified upload does not exist" na finalização.
+      requestChecksumCalculation: 'WHEN_REQUIRED' as any,
+      responseChecksumValidation: 'WHEN_REQUIRED' as any,
     });
+
+    // Remove headers de checksum (x-amz-sdk-checksum-algorithm / x-amz-checksum-*)
+    // que o SDK ainda injeta em UploadPart mesmo com a flag acima em algumas versões.
+    s3.middlewareStack.add(
+      (next: any) => async (args: any) => {
+        if (args?.request?.headers) {
+          const h = args.request.headers;
+          for (const k of Object.keys(h)) {
+            const lk = k.toLowerCase();
+            if (lk === 'x-amz-sdk-checksum-algorithm' || lk.startsWith('x-amz-checksum-')) {
+              delete h[k];
+            }
+          }
+        }
+        return next(args);
+      },
+      { step: 'build', name: 'stripSupabaseChecksumHeaders', priority: 'low' }
+    );
     s3Ref.current = s3;
 
     try {
@@ -127,7 +150,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           CacheControl: '3600',
         },
         partSize: PART_SIZE,
-        queueSize: 4,
+        queueSize: 3,
         leavePartsOnError: false,
       });
 
