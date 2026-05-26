@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
-import { S3Client, AbortMultipartUploadCommand } from '@aws-sdk/client-s3';
-import { Upload } from '@aws-sdk/lib-storage';
+import * as tus from 'tus-js-client';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
@@ -38,10 +37,9 @@ const initialState: UploadState = {
 const UploadContext = createContext<UploadContextType | null>(null);
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID as string;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 const BUCKET = 'videos';
-const PART_SIZE = 16 * 1024 * 1024; // 16MB
+const CHUNK_SIZE = 6 * 1024 * 1024; // 6MB (exigido pelo TUS do Storage)
 
 function makeKey(file: File) {
   const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
@@ -52,12 +50,9 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<UploadState>(initialState);
   const onCompleteRef = useRef<((filePath: string) => void) | null>(null);
 
-  const uploaderRef = useRef<Upload | null>(null);
-  const s3Ref = useRef<S3Client | null>(null);
+  const tusRef = useRef<tus.Upload | null>(null);
   const cancelledRef = useRef<boolean>(false);
   const lastProgressRef = useRef({ bytes: 0, time: Date.now() });
-  const currentKeyRef = useRef<string | null>(null);
-  const currentUploadIdRef = useRef<string | null>(null);
 
   const registerOnComplete = useCallback((cb: ((filePath: string) => void) | null) => {
     onCompleteRef.current = cb;
@@ -88,8 +83,6 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     lastProgressRef.current = { bytes: 0, time: Date.now() };
 
     const key = makeKey(file);
-    currentKeyRef.current = key;
-    currentUploadIdRef.current = null;
 
     setState({
       status: 'uploading',
@@ -101,91 +94,53 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       filePath: null,
     });
 
-    // S3 endpoint do Storage. Usa subdomínio storage para melhor performance em arquivos grandes.
-    const endpoint = `https://${SUPABASE_PROJECT_ID}.storage.supabase.co/storage/v1/s3`;
-
-    const s3 = new S3Client({
-      forcePathStyle: true,
-      region: 'us-east-1',
-      endpoint,
-      credentials: {
-        accessKeyId: SUPABASE_PROJECT_ID,
-        secretAccessKey: SUPABASE_PUBLISHABLE_KEY,
-        sessionToken: session.access_token,
-      },
-      // Supabase S3 não suporta os checksums automáticos do AWS SDK v3 mais novo.
-      // Sem isto, partes são rejeitadas e o multipart é abortado no servidor,
-      // causando "The specified upload does not exist" na finalização.
-      requestChecksumCalculation: 'WHEN_REQUIRED' as any,
-      responseChecksumValidation: 'WHEN_REQUIRED' as any,
-    });
-
-    // Remove headers de checksum (x-amz-sdk-checksum-algorithm / x-amz-checksum-*)
-    // que o SDK ainda injeta em UploadPart mesmo com a flag acima em algumas versões.
-    s3.middlewareStack.add(
-      (next: any) => async (args: any) => {
-        if (args?.request?.headers) {
-          const h = args.request.headers;
-          for (const k of Object.keys(h)) {
-            const lk = k.toLowerCase();
-            if (lk === 'x-amz-sdk-checksum-algorithm' || lk.startsWith('x-amz-checksum-')) {
-              delete h[k];
-            }
-          }
-        }
-        return next(args);
-      },
-      { step: 'build', name: 'stripSupabaseChecksumHeaders', priority: 'low' }
-    );
-    s3Ref.current = s3;
-
     try {
-      const uploader = new Upload({
-        client: s3,
-        params: {
-          Bucket: BUCKET,
-          Key: key,
-          Body: file,
-          ContentType: file.type || 'video/mp4',
-          CacheControl: '3600',
-        },
-        partSize: PART_SIZE,
-        queueSize: 3,
-        leavePartsOnError: false,
+      await new Promise<void>((resolve, reject) => {
+        const upload = new tus.Upload(file, {
+          endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          headers: {
+            authorization: `Bearer ${session.access_token}`,
+            'x-upsert': 'false',
+            apikey: SUPABASE_PUBLISHABLE_KEY,
+          },
+          uploadDataDuringCreation: true,
+          removeFingerprintOnSuccess: true,
+          metadata: {
+            bucketName: BUCKET,
+            objectName: key,
+            contentType: file.type || 'video/mp4',
+            cacheControl: '3600',
+          },
+          chunkSize: CHUNK_SIZE,
+          onError: (err) => reject(err),
+          onProgress: (bytesUploaded, bytesTotal) => {
+            const now = Date.now();
+            const dt = (now - lastProgressRef.current.time) / 1000;
+            let speedStr = '';
+            if (dt > 0.5) {
+              const db = bytesUploaded - lastProgressRef.current.bytes;
+              const sp = db / dt;
+              if (sp > 0) {
+                speedStr = sp >= 1024 * 1024
+                  ? `${(sp / (1024 * 1024)).toFixed(1)} MB/s`
+                  : `${(sp / 1024).toFixed(0)} KB/s`;
+              }
+              lastProgressRef.current = { bytes: bytesUploaded, time: now };
+            }
+            const pct = Math.min(99, Math.round((bytesUploaded / bytesTotal) * 100));
+            setState((prev) => ({
+              ...prev,
+              progress: pct,
+              ...(speedStr ? { speed: speedStr } : {}),
+            }));
+          },
+          onSuccess: () => resolve(),
+        });
+
+        tusRef.current = upload;
+        upload.start();
       });
-
-      uploaderRef.current = uploader;
-
-      // Captura o uploadId quando criado, para poder abortar depois
-      // @ts-ignore - evento interno
-      uploader.on?.('httpUploadProgress', (p: { loaded?: number; total?: number; part?: number; Key?: string; UploadId?: string }) => {
-        if (p.UploadId && !currentUploadIdRef.current) {
-          currentUploadIdRef.current = p.UploadId;
-        }
-        const loaded = p.loaded || 0;
-        const total = p.total || file.size;
-        const now = Date.now();
-        const dt = (now - lastProgressRef.current.time) / 1000;
-        let speedStr = '';
-        if (dt > 0.5) {
-          const db = loaded - lastProgressRef.current.bytes;
-          const sp = db / dt;
-          if (sp > 0) {
-            speedStr = sp >= 1024 * 1024
-              ? `${(sp / (1024 * 1024)).toFixed(1)} MB/s`
-              : `${(sp / 1024).toFixed(0)} KB/s`;
-          }
-          lastProgressRef.current = { bytes: loaded, time: now };
-        }
-        const pct = Math.min(99, Math.round((loaded / total) * 100));
-        setState((prev) => ({
-          ...prev,
-          progress: pct,
-          ...(speedStr ? { speed: speedStr } : {}),
-        }));
-      });
-
-      await uploader.done();
 
       if (cancelledRef.current) return;
 
@@ -201,48 +156,46 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     } catch (e: any) {
       if (cancelledRef.current) return;
       console.error('[Upload] erro', e);
-      const raw = e?.message || e?.name || 'Erro desconhecido no upload';
-      let message = raw;
-      if (/AccessDenied|Forbidden/i.test(raw)) {
+      const raw = e?.message || e?.originalResponse?.getBody?.() || e?.name || 'Erro desconhecido no upload';
+      let message = String(raw);
+      if (/403|AccessDenied|Forbidden/i.test(message)) {
         message = 'Sem permissão para enviar vídeos. Verifique se sua conta tem papel de admin ou produtor.';
-      } else if (/SignatureDoesNotMatch|InvalidAccessKeyId|Unauthorized|jwt/i.test(raw)) {
+      } else if (/401|Unauthorized|jwt|token/i.test(message)) {
         message = 'Sessão expirada. Faça login novamente e tente outra vez.';
-      } else if (/NetworkError|Failed to fetch|network/i.test(raw)) {
+      } else if (/NetworkError|Failed to fetch|network/i.test(message)) {
         message = 'Falha de rede durante o upload. Verifique sua conexão e tente novamente.';
       }
       setState((prev) => ({ ...prev, status: 'error', error: message, speed: '' }));
       toast({ title: 'Erro no upload', description: message, variant: 'destructive' });
     } finally {
-      uploaderRef.current = null;
+      tusRef.current = null;
     }
   }, []);
 
-  // Pausar/Resumir não é suportado de forma confiável neste fluxo; manter o status atual.
   const pauseUpload = useCallback(() => {
-    toast({ title: 'Pausa indisponível', description: 'Este upload não pode ser pausado. Aguarde a conclusão ou cancele.' });
+    const u = tusRef.current;
+    if (u) {
+      u.abort();
+      setState((prev) => ({ ...prev, status: 'paused', speed: '' }));
+    }
   }, []);
 
   const resumeUpload = useCallback(() => {
-    // no-op
+    const u = tusRef.current;
+    if (u) {
+      lastProgressRef.current = { bytes: 0, time: Date.now() };
+      u.start();
+      setState((prev) => ({ ...prev, status: 'uploading' }));
+    }
   }, []);
 
   const cancelUpload = useCallback(() => {
     cancelledRef.current = true;
-    const uploader = uploaderRef.current;
-    if (uploader) {
-      uploader.abort().catch(() => {});
+    const u = tusRef.current;
+    if (u) {
+      u.abort(true).catch(() => {});
     }
-    // Aborta multipart no servidor se já tivermos o UploadId
-    const s3 = s3Ref.current;
-    const key = currentKeyRef.current;
-    const uploadId = currentUploadIdRef.current;
-    if (s3 && key && uploadId) {
-      s3.send(new AbortMultipartUploadCommand({ Bucket: BUCKET, Key: key, UploadId: uploadId })).catch(() => {});
-    }
-    uploaderRef.current = null;
-    s3Ref.current = null;
-    currentKeyRef.current = null;
-    currentUploadIdRef.current = null;
+    tusRef.current = null;
     onCompleteRef.current = null;
     setState(initialState);
     toast({ title: 'Upload cancelado' });
