@@ -1,12 +1,29 @@
-Vou aplicar uma correção no backend para o upload voltar a aceitar vídeos grandes.
+O limite do bucket `videos` já está em 6GB e o backend está saudável. Como o TUS continua recebendo `413 Maximum size exceeded` na criação do upload, a solução mais segura é parar de usar esse endpoint para vídeos grandes e voltar para o fluxo multipart direto em S3, que era a arquitetura prevista do projeto.
 
-Plano:
-1. Atualizar a configuração do bucket privado `videos` para aceitar arquivos de até 6GB.
-2. Garantir que os tipos de vídeo comuns sejam aceitos: MP4, WebM, MOV/QuickTime, AVI, MPEG e MKV.
-3. Não alterar o frontend de upload agora, porque o erro atual acontece antes do envio dos chunks: o backend rejeita o tamanho total declarado.
-4. Depois da alteração, testar novamente o upload pelo fluxo atual.
+Plano de implementação:
 
-Detalhe técnico:
-- O erro `413 Maximum size exceeded` vem do limite `file_size_limit` do bucket.
-- O TUS envia o tamanho total no header `Upload-Length` ao criar o upload; se esse valor passa do limite do bucket, o backend bloqueia antes de começar o envio.
-- A correção é uma atualização de configuração em `storage.buckets`, não uma mudança visual nem de lógica de tela.
+1. Restaurar o upload direto para S3 multipart
+- Trocar o fluxo atual em `UploadContext.tsx`, que usa `tus-js-client` + `/storage/v1/upload/resumable`, por upload multipart em partes.
+- O frontend não enviará o vídeo inteiro de uma vez; ele enviará partes menores, com progresso real.
+- Manter pausa/cancelamento/progresso no indicador global.
+
+2. Criar/usar funções de backend para assinatura segura
+- Criar funções de backend para:
+  - iniciar upload multipart;
+  - gerar URLs assinadas para cada parte;
+  - concluir upload multipart;
+  - abortar upload quando cancelar.
+- O segredo da S3 fica só no backend, nunca no navegador.
+
+3. Salvar no caminho esperado pelo app
+- Ao concluir, retornar um `filePath` compatível com o cadastro do filme.
+- Manter o comportamento atual: depois do upload, o formulário recebe o caminho do vídeo e pode salvar o filme normalmente.
+
+4. Remover a dependência do TUS para vídeos
+- Tirar o uso de `tus-js-client` do fluxo de vídeo.
+- O bucket `videos` pode continuar existindo, mas o upload principal de vídeo não dependerá mais do limite que está gerando 413.
+
+5. Validar com logs e mensagens melhores
+- Se faltar configuração S3 no backend, mostrar erro claro.
+- Se uma parte falhar, exibir erro de rede/assinatura em vez de erro genérico.
+- Confirmar que arquivos grandes começam a carregar de fato, em vez de falhar no POST inicial.
