@@ -38,7 +38,7 @@ const UploadContext = createContext<UploadContextType | null>(null);
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 const MAX_FILE_SIZE = 6 * 1024 * 1024 * 1024; // 6GB
-const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB por parte, sem TUS
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB por parte, sem TUS e abaixo do limite do backend
 const MAX_RETRIES = 3;
 
 const validTypes = new Set([
