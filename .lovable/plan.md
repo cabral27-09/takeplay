@@ -1,71 +1,84 @@
-# Por que falhou agora
+## Objetivo
 
-O upload dos 458 chunks (2,4GB) chegou a 100%. O erro veio na etapa de **finalização**: a Edge Function `finalize-video-upload` baixa todos os chunks e faz **um único PUT de 2,4GB** para o Storage. Essa conexão HTTP/2 caiu no meio (`stream error: unspecific protocol error`) — é exatamente o tipo de coisa que acontece com upload gigante via Edge Function (limite de tempo/memória, instabilidade de stream longo, reciclagem do worker).
-
-Ou seja: o vídeo subiu, mas foi jogado fora na hora de remontar. Continuar nesse caminho vai falhar de novo, porque o gargalo é o "reenvio" no servidor.
-
-# Solução: subir direto para o destino final via S3 Multipart
-
-O Supabase Storage tem endpoint S3-compatível. Vamos usar **S3 Multipart Upload** apontando direto para o arquivo final em `videos/movies/...`. Cada parte de 5–10MB vai **direto do navegador para o S3**, com URL pré-assinada gerada pela Edge Function. Não há reenvio, não há limite de Edge Function no caminho dos bytes, não há TUS, não há 413.
-
-## Fluxo
+Eliminar o gargalo das Edge Functions de upload (`upload-video-chunk` + `finalize-video-upload`) — que hoje recebem os chunks no servidor e depois rebaixam/reenviam o arquivo inteiro pro Storage, estourando o limite de 150s. Em vez disso, o navegador envia o arquivo direto pro Supabase Storage usando o protocolo TUS (resumable upload nativo), em apenas 2 passos:
 
 ```text
-Browser                          Edge Functions                S3 (Storage)
-  |  start-multipart  ----------> valida papel ---------------> CreateMultipartUpload
-  |  <----- uploadId, key --------------------------------------|
-  |
-  |  para cada parte i:
-  |    sign-part(i)  ------------> presign PUT --------------->|
-  |    <----- url ---------------------------------------------|
-  |    PUT parte i (binário cru) -----------------------------> S3
-  |    <----- ETag i ------------------------------------------|
-  |
-  |  complete-multipart(parts[]) -> CompleteMultipartUpload -->|
-  |  <----- filePath final ------------------------------------|
+[Browser tus-js-client]  ──►  [Supabase Storage /upload/resumable]
 ```
 
-Pausar = parar de pedir próximas partes. Retomar = continuar do índice. Cancelar = `AbortMultipartUpload`.
+Não há mais Edge Function no caminho do upload. Pausa/retomada/retry/progresso passam a ser nativos do TUS.
 
-# Mudanças
+## Como vai funcionar
 
-## Backend (Edge Functions novas)
+1. **Cliente pega o JWT da sessão** (`supabase.auth.getSession()`).
+2. **Cria um `tus.Upload`** apontando pra `${SUPABASE_URL}/storage/v1/upload/resumable`, com:
+   - `Authorization: Bearer <jwt>` + `apikey: <anon>` + `x-upsert: true`
+   - `metadata`: `bucketName=videos`, `objectName=movies/{timestamp}-{rand}.{ext}`, `contentType`, `cacheControl=3600`
+   - `chunkSize: 6 * 1024 * 1024` (recomendado pelo Supabase; **obrigatório** ser fixo)
+   - `removeFingerprintOnSuccess: true`
+   - Callbacks: `onError`, `onProgress`, `onSuccess` → chama `onComplete(filePath)`
+3. **Pausa/retomada** usam `upload.abort()` e `upload.start()` — o `tus-js-client` guarda o offset no `localStorage` (fingerprint) e retoma de onde parou, inclusive depois de refresh da página.
+4. **Cancelamento** chama `upload.abort(true)` (descarta o upload no servidor) e limpa o fingerprint.
+5. **Autorização**: a permissão pra escrever em `videos/movies/...` continua sendo controlada por **RLS na tabela `storage.objects`**. Precisa existir uma policy que permita `INSERT` no bucket `videos` para usuários `authenticated` que tenham papel `admin` ou `producer` (via `has_role`). Se já existir, não mexer; se não, criar via migration.
 
-1. `s3-multipart-start` — valida JWT + papel admin/producer, gera `key = movies/<timestamp>-<rand>.<ext>`, chama `CreateMultipartUpload`, retorna `{ uploadId, key }`.
-2. `s3-multipart-sign-part` — recebe `{ uploadId, key, partNumber }`, retorna URL pré-assinada (PUT) válida por ~1h para aquela parte.
-3. `s3-multipart-complete` — recebe `{ uploadId, key, parts: [{PartNumber, ETag}] }`, chama `CompleteMultipartUpload`, retorna `{ filePath: key }`.
-4. `s3-multipart-abort` — recebe `{ uploadId, key }`, chama `AbortMultipartUpload`.
+## Arquivos a alterar
 
-Usam o endpoint S3 do Storage: `https://<ref>.supabase.co/storage/v1/s3` no bucket `videos`, autenticando com o **service role** (já presente em `SUPABASE_SERVICE_ROLE_KEY`). Assinatura SigV4 feita com `aws4fetch` (lib leve, roda no Deno via `esm.sh`).
+### `package.json`
+- Adicionar dependência: `tus-js-client` (^4).
 
-Sem novos segredos: o Storage S3 aceita `access_key_id = <project_ref>` e `secret_access_key = <service_role_key>` (padrão do Supabase Storage S3).
+### `src/contexts/UploadContext.tsx` (reescrito)
+- Remover `invokeUploadChunk`, `invokeFinalize`, `CHUNK_SIZE`, `MAX_RETRIES`, lógica de loop manual, `pauseResolverRef`, `activeUploadRef` baseado em `uploadId`.
+- Manter a mesma API pública: `startUpload`, `pauseUpload`, `resumeUpload`, `cancelUpload`, `registerOnComplete`, `upload` (mesmos campos: `status`, `fileName`, `fileSize`, `progress`, `speed`, `error`, `filePath`).
+- Internamente guardar `uploadRef = useRef<tus.Upload | null>(null)`.
+- `startUpload`:
+  - validar tipo/tamanho (mesmas regras),
+  - `refreshSession` + `getSession`,
+  - gerar `objectName = movies/${Date.now()}-${rand}.${ext}`,
+  - instanciar `tus.Upload(file, { endpoint, headers, metadata, chunkSize: 6MB, removeFingerprintOnSuccess: true, onProgress, onSuccess, onError })`,
+  - calcular `speed` no `onProgress` usando timestamp + bytes anteriores (igual hoje),
+  - no `onSuccess` setar `filePath = objectName` e disparar `onCompleteRef.current?.(filePath)`.
+- `pauseUpload`: `uploadRef.current?.abort()` + status `'paused'`.
+- `resumeUpload`: `uploadRef.current?.start()` + status `'uploading'`.
+- `cancelUpload`: `uploadRef.current?.abort(true)` (true = também apaga no servidor), resetar state.
+- Mensagens de erro traduzidas mantêm o mesmo formato (sessão expirada, sem permissão, rede, etc.).
 
-## Frontend (`src/contexts/UploadContext.tsx`)
+### `supabase/config.toml`
+- Remover blocos `[functions.upload-video-chunk]` e `[functions.finalize-video-upload]`.
 
-Reescrever a lógica de upload:
-- Partes de **8MB** (mínimo S3 = 5MB, exceto a última).
-- Loop: pedir URL assinada → `fetch(PUT, body=chunk)` → guardar ETag retornado no header.
-- Progresso real por bytes enviados (mantém UI atual: %, velocidade, pausar/retomar/cancelar).
-- Pausar/Retomar funciona naturalmente (apenas para/continua o loop).
-- Cancelar chama `s3-multipart-abort` para não deixar lixo cobrado.
-- Ao final, chama `complete` e devolve `filePath` (compatível com `VideoUploader`/registro de filme — mesmo formato `movies/<arquivo>`).
+### Edge Functions (deletar)
+- `supabase/functions/upload-video-chunk/` (pasta inteira)
+- `supabase/functions/finalize-video-upload/` (pasta inteira)
 
-## Remover
+### `src/components/admin/VideoUploader.tsx` e `GlobalUploadIndicator.tsx`
+- **Não mudam.** Consomem só a API do `useUpload`, que continua idêntica.
 
-- `supabase/functions/upload-video-chunk` (não usado mais)
-- `supabase/functions/finalize-video-upload` (não usado mais)
-- Migration: remover `application/octet-stream` da whitelist de MIME do bucket `videos` (não é mais necessário). Manter limite de 6GB.
+## Storage / RLS (verificar antes de buildar)
 
-# Por que isso resolve de vez
+Bucket `videos` já existe e é privado — OK. Vou conferir se as policies em `storage.objects` permitem `INSERT` pro role autorizado no prefixo `movies/`. Se faltar, criar migration:
 
-- Os bytes nunca passam por uma Edge Function — só pequenos JSONs de coordenação.
-- Sem PUT único de 2,4GB em lugar nenhum: o S3 já recebe parte por parte e monta nativamente no `Complete`.
-- Sem o endpoint `/upload/resumable` (causa do 413 original).
-- Retomar uma parte que falhar custa só re-enviar 8MB.
-- É o padrão usado por qualquer serviço de upload de vídeo grande (YouTube, Vimeo, Mux usam o mesmo conceito).
+```sql
+CREATE POLICY "Admins e producers podem enviar vídeos"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'videos'
+  AND (public.has_role(auth.uid(),'admin') OR public.has_role(auth.uid(),'producer'))
+);
+```
 
-# Riscos / pontos de atenção
+(A policy de leitura via `get-video-url` com service role continua funcionando do mesmo jeito.)
 
-- Precisa confirmar que o endpoint S3 do Storage está habilitado no projeto (vem por padrão). Se não estiver, ativamos antes.
-- CORS no endpoint S3 do Storage costuma estar liberado por padrão; se houver bloqueio, ajustamos.
-- Após o `Complete`, o objeto fica no caminho final imediatamente — o registro do filme pode usar `filePath` igual hoje.
+## Detalhes técnicos importantes
+
+- **chunkSize fixo é obrigatório** no endpoint do Supabase TUS — não usar `Infinity`.
+- **Header `x-upsert`** vai como `uploadDataDuringCreation`-friendly metadata? Não: o Supabase aceita como **header** na request inicial. `tus-js-client` permite via `headers`.
+- **Retomada após refresh**: como `removeFingerprintOnSuccess: true` + storage padrão `localStorage`, basta o usuário escolher o mesmo arquivo de novo — o tus reconhece pelo fingerprint e continua. (Não precisa UI nova; é opcional documentar.)
+- **Progresso**: `onProgress(bytesUploaded, bytesTotal)` → `progress = round(bytesUploaded/bytesTotal*100)` e cálculo de velocidade igual hoje.
+- **CORS**: o endpoint `/storage/v1/upload/resumable` já tem CORS liberado pelo Supabase, sem ação necessária.
+- **Limite de 6GB** continua valendo via `storage.file_size_limit = "6GiB"` no `config.toml` (já configurado).
+
+## Resultado
+
+- Upload de qualquer tamanho (até 6GB) sem timeout de Edge Function.
+- Pausa, retomada e retry nativos e mais robustos.
+- Menos código pra manter (2 Edge Functions a menos, ~300 linhas removidas).
+- Sem custo de execução de Edge Function por chunk.
