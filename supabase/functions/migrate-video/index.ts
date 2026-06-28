@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
     const EXT_KEY = Deno.env.get('EXTERNAL_VIDEO_SUPABASE_ANON_KEY')!
 
     if (body0?.mode === 'list-buckets') {
-      const cleanBase = EXT_URL.replace(/\/+$/, '')
+      const cleanBase = EXT_URL.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '')
       const r = await fetch(`${cleanBase}/storage/v1/bucket`, {
         headers: { Authorization: `Bearer ${EXT_KEY}`, apikey: EXT_KEY },
       })
