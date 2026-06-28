@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
         headers: { Authorization: `Bearer ${EXT_KEY}`, apikey: EXT_KEY },
       })
       const txt = await r.text()
-      return new Response(JSON.stringify({ status: r.status, host: new URL(cleanBase).host, body: txt }), {
+      return new Response(JSON.stringify({ status: r.status, ext_url_raw: EXT_URL, host: new URL(cleanBase).host, pathname: new URL(cleanBase).pathname, body: txt }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
