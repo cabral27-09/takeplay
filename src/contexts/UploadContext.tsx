@@ -128,7 +128,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       uploadDataDuringCreation: true,
       removeFingerprintOnSuccess: true,
       metadata: {
-        bucketName: 'videos',
+        bucketName: 'manivela_filmes',
         objectName,
         contentType: normalizedType,
         cacheControl: '3600',
