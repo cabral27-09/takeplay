@@ -74,6 +74,8 @@ Deno.serve(async (req) => {
     // If it's a full URL, extract the path
     if (videoPath.startsWith('http')) {
       const patterns = [
+        '/storage/v1/object/public/manivela_filmes/',
+        '/storage/v1/object/sign/manivela_filmes/',
         '/storage/v1/object/public/videos/',
         '/storage/v1/object/sign/videos/',
       ];
@@ -98,7 +100,7 @@ Deno.serve(async (req) => {
       
       // Generate signed URL with 2 hour expiration
       const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
-        .from("videos")
+        .from("manivela_filmes")
         .createSignedUrl(videoPath, 7200); // 2 hours
 
       if (signedUrlError || !signedUrlData) {
@@ -233,7 +235,7 @@ Deno.serve(async (req) => {
 
     // Generate signed URL with 2 hour expiration
     const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
-      .from("videos")
+      .from("manivela_filmes")
       .createSignedUrl(videoPath, 7200); // 2 hours
 
     if (signedUrlError || !signedUrlData) {
