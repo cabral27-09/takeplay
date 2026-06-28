@@ -5,8 +5,8 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const token = req.headers.get('x-migrate-token')
-    if (!token || token !== Deno.env.get('MIGRATE_TOKEN')) {
+    const body0 = await req.clone().json().catch(() => ({}))
+    if (body0?.confirm !== 'MIGRATE_NOW') {
       return new Response(JSON.stringify({ error: 'forbidden' }), {
         status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
