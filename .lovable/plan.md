@@ -1,19 +1,43 @@
-Vou apenas trocar o bucket de destino dos vídeos de `videos` para `manivela_filmes` (que você já criou). Sem mudar lógica de upload, sem mexer em RLS, sem migrations.
+Apontar os uploads e a reprodução de vídeos para o **projeto Supabase externo** (bucket `manivela_filmes`), usando os secrets `EXTERNAL_VIDEO_SUPABASE_URL` e `EXTERNAL_VIDEO_SUPABASE_ANON_KEY` que você acabou de atualizar.
 
 ## Arquivos alterados
 
-### `src/contexts/UploadContext.tsx`
-- Linha 131: `bucketName: 'videos'` → `bucketName: 'manivela_filmes'`.
-- Nenhuma outra mudança no fluxo TUS.
+### 1. `src/contexts/UploadContext.tsx` (upload TUS → projeto externo)
+- Adicionar `VITE_EXTERNAL_VIDEO_SUPABASE_URL` e `VITE_EXTERNAL_VIDEO_SUPABASE_ANON_KEY` em `.env` (cópias públicas necessárias porque o upload acontece no navegador).
+- Trocar o endpoint TUS de `${SUPABASE_URL}/storage/v1/upload/resumable` para `${EXTERNAL_URL}/storage/v1/upload/resumable`.
+- Trocar os headers `authorization` e `apikey` para usar a anon key do projeto externo (não há sessão de usuário no projeto externo — o acesso será controlado por policy de bucket).
+- Manter `bucketName: 'manivela_filmes'`, mesmo objectName, mesmo fluxo de progresso/pause/resume.
 
-### `supabase/functions/get-video-url/index.ts`
-- Linha 101 e 236: `.from("videos")` → `.from("manivela_filmes")` ao gerar signed URL.
-- Linhas 77–78: adicionar reconhecimento de URLs antigas com `/storage/v1/object/public/manivela_filmes/` e `/storage/v1/object/sign/manivela_filmes/`, mantendo também os padrões antigos `/videos/` para compatibilidade com filmes já cadastrados no bucket anterior.
+### 2. `supabase/functions/get-video-url/index.ts` (signed URLs → projeto externo)
+- Criar um segundo client Supabase usando `EXTERNAL_VIDEO_SUPABASE_URL` + `EXTERNAL_VIDEO_SUPABASE_ANON_KEY`.
+- Quando o path do filme estiver no bucket `manivela_filmes` (ou for um path novo `movies/...`), assinar a URL pelo client externo.
+- Manter o client antigo (projeto atual) como fallback para filmes já cadastrados no bucket `videos`, para não quebrar nada que já existe.
 
-## Observações importantes
+### 3. Edge function `migrate-video`
+- Já está usando os secrets externos corretamente; nenhuma mudança de código necessária. Só vai voltar a funcionar quando você quiser migrar os filmes antigos (depois que a policy estiver no lugar).
 
-- **Vídeos antigos**: os filmes que já estão no bucket `videos` deixarão de tocar, porque a função vai procurá-los em `manivela_filmes`. Para corrigir, você precisa mover os arquivos antigos para o novo bucket (ou manter os dois — me avise se quiser que eu faça a função tentar primeiro o novo e cair pro antigo como fallback).
-- **RLS do novo bucket**: confirme que `manivela_filmes` já tem policies em `storage.objects` permitindo `INSERT` para admins/produtores. Se não tiver, o upload vai falhar com 403 e eu adiciono uma migration. Diga se quer que eu já crie essas policies.
-- **Limite de 6GB**: o limite global em `supabase/config.toml` (`file_size_limit = "6GiB"`) continua valendo para qualquer bucket, então não precisa configurar nada extra.
+## O que VOCÊ precisa fazer no projeto externo
 
-Não vou criar bucket, não vou apagar nada, não vou tocar em outras funções nem no schema do banco.
+O projeto externo tem auth próprio e o navegador vai chamar o TUS como `anon`. Para o upload funcionar, rode este SQL no SQL Editor do **projeto externo** (onde está o bucket `manivela_filmes`):
+
+```sql
+-- Permite upload anônimo SOMENTE no bucket manivela_filmes
+CREATE POLICY "anon upload manivela_filmes"
+ON storage.objects FOR INSERT TO anon
+WITH CHECK (bucket_id = 'manivela_filmes');
+
+-- Permite leitura anônima (necessária para signed URL / play)
+CREATE POLICY "anon read manivela_filmes"
+ON storage.objects FOR SELECT TO anon
+USING (bucket_id = 'manivela_filmes');
+```
+
+> Observação: isso libera upload anônimo nesse bucket. Como o site só expõe o uploader para admins/produtores logados aqui no app, na prática só eles veem o botão. Se você quiser restringir de verdade no servidor externo, depois a gente troca para um esquema com Edge Function assinando uploads (mais complexo, mas mais seguro).
+
+## O que NÃO vou mexer
+
+- Não vou alterar nada na base do projeto atual.
+- Não vou apagar o bucket `videos` nem os filmes antigos.
+- Não vou tocar em auth, RLS de outras tabelas, ou no `supabase/config.toml`.
+
+Quando você aprovar, eu já aplico as 3 mudanças de código. A migração dos filmes antigos para o novo bucket fica para um passo separado, quando você quiser.
