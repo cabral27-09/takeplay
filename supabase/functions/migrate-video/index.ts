@@ -25,6 +25,19 @@ Deno.serve(async (req) => {
     const EXT_URL = Deno.env.get('EXTERNAL_VIDEO_SUPABASE_URL')!
     const EXT_KEY = Deno.env.get('EXTERNAL_VIDEO_SUPABASE_ANON_KEY')!
 
+    if (body0?.mode === 'list-buckets') {
+      const cleanBase = EXT_URL.replace(/\/+$/, '')
+      const r = await fetch(`${cleanBase}/storage/v1/bucket`, {
+        headers: { Authorization: `Bearer ${EXT_KEY}`, apikey: EXT_KEY },
+      })
+      const txt = await r.text()
+      return new Response(JSON.stringify({ status: r.status, host: new URL(cleanBase).host, body: txt }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+
+
     // 1) Signed URL from old bucket (this project)
     const src = createClient(SUPABASE_URL, SERVICE_ROLE)
     const { data: signed, error: signErr } = await src.storage
