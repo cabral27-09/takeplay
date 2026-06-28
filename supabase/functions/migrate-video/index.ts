@@ -38,8 +38,10 @@ Deno.serve(async (req) => {
     const contentType = dl.headers.get('content-type') || 'video/mp4'
     const contentLength = dl.headers.get('content-length') || undefined
 
-    // 3) Stream-upload to external bucket via Storage REST (PUT)
-    const uploadUrl = `${EXT_URL}/storage/v1/object/manivela_filmes/${path}`
+    // 3) Stream-upload to external bucket via Storage REST
+    const cleanBase = EXT_URL.replace(/\/+$/, '')
+    const bucket = (body?.bucket as string) || 'manivela_filmes'
+    const uploadUrl = `${cleanBase}/storage/v1/object/${bucket}/${path}`
     const up = await fetch(uploadUrl, {
       method: 'POST',
       headers: {
@@ -56,7 +58,7 @@ Deno.serve(async (req) => {
 
     if (!up.ok) {
       const txt = await up.text()
-      throw new Error(`upload ${up.status}: ${txt}`)
+      throw new Error(`upload ${up.status} to ${uploadUrl.replace(cleanBase, '<EXT>')}: ${txt}`)
     }
 
     return new Response(JSON.stringify({ ok: true, path }), {
