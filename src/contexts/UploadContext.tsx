@@ -99,6 +99,22 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Get external storage config (URL + anon key for the manivela_filmes project)
+    let extUrl = '';
+    let extKey = '';
+    let bucketName = 'manivela_filmes';
+    try {
+      const { data, error } = await supabase.functions.invoke('get-upload-config');
+      if (error || !data?.url || !data?.anonKey) throw error || new Error('config inválida');
+      extUrl = String(data.url).replace(/\/+$/, '');
+      extKey = String(data.anonKey);
+      bucketName = String(data.bucket || 'manivela_filmes');
+    } catch (e) {
+      console.error('[Upload] get-upload-config falhou', e);
+      toast({ title: 'Configuração indisponível', description: 'Não foi possível obter as credenciais de upload.', variant: 'destructive' });
+      return;
+    }
+
     if (onComplete) onCompleteRef.current = onComplete;
 
     const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
@@ -117,18 +133,19 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       filePath: null,
     });
 
+
     const tusUpload = new tus.Upload(file, {
-      endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
+      endpoint: `${extUrl}/storage/v1/upload/resumable`,
       retryDelays: [0, 1000, 3000, 5000, 10000],
       headers: {
-        authorization: `Bearer ${session.access_token}`,
-        apikey: SUPABASE_PUBLISHABLE_KEY,
+        authorization: `Bearer ${extKey}`,
+        apikey: extKey,
         'x-upsert': 'true',
       },
       uploadDataDuringCreation: true,
       removeFingerprintOnSuccess: true,
       metadata: {
-        bucketName: 'manivela_filmes',
+        bucketName,
         objectName,
         contentType: normalizedType,
         cacheControl: '3600',

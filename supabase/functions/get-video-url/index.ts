@@ -15,6 +15,10 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const extUrl = (Deno.env.get("EXTERNAL_VIDEO_SUPABASE_URL") || "")
+      .replace(/\/rest\/v1\/?$/, "")
+      .replace(/\/+$/, "");
+    const extKey = Deno.env.get("EXTERNAL_VIDEO_SUPABASE_ANON_KEY") || "";
 
     if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
       console.error("Missing environment variables");
@@ -27,8 +31,16 @@ Deno.serve(async (req) => {
     // Get the authorization header
     const authHeader = req.headers.get("Authorization");
     
-    // Create admin client for generating signed URLs
+    // Admin client (current project) for DB lookups + signing legacy `videos` bucket
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    // External anon client for the manivela_filmes bucket (new project)
+    const externalStorage = extUrl && extKey ? createClient(extUrl, extKey) : null;
+
+    // Decide which client/bucket to use based on the path's source
+    let useExternal = false;
+    let bucketForSigning = "videos";
+
 
     // Parse request body
     const { movieId, isPreview = false } = await req.json();
@@ -71,36 +83,51 @@ Deno.serve(async (req) => {
     
     console.log(`Original video_url from database: ${movie.video_url}`);
     
-    // If it's a full URL, extract the path
+    // If it's a full URL, extract the path AND detect the source project/bucket
     if (videoPath.startsWith('http')) {
-      const patterns = [
-        '/storage/v1/object/public/manivela_filmes/',
-        '/storage/v1/object/sign/manivela_filmes/',
-        '/storage/v1/object/public/videos/',
-        '/storage/v1/object/sign/videos/',
+      const patterns: { pat: string; external: boolean; bucket: string }[] = [
+        { pat: '/storage/v1/object/public/manivela_filmes/', external: true, bucket: 'manivela_filmes' },
+        { pat: '/storage/v1/object/sign/manivela_filmes/',   external: true, bucket: 'manivela_filmes' },
+        { pat: '/storage/v1/object/public/videos/',           external: false, bucket: 'videos' },
+        { pat: '/storage/v1/object/sign/videos/',             external: false, bucket: 'videos' },
       ];
-      for (const pattern of patterns) {
-        if (videoPath.includes(pattern)) {
-          videoPath = videoPath.split(pattern)[1]?.split('?')[0] || videoPath;
+      for (const { pat, external, bucket } of patterns) {
+        if (videoPath.includes(pat)) {
+          videoPath = videoPath.split(pat)[1]?.split('?')[0] || videoPath;
+          useExternal = external;
+          bucketForSigning = bucket;
           break;
         }
       }
+    } else {
+      // Bare path (no http). Newly uploaded files live in the external manivela_filmes bucket.
+      useExternal = true;
+      bucketForSigning = 'manivela_filmes';
     }
-    
+
     // Remove leading slash if present
     if (videoPath.startsWith('/')) {
       videoPath = videoPath.substring(1);
     }
 
-    console.log(`Normalized video path for storage lookup: ${videoPath}`);
+    if (useExternal && !externalStorage) {
+      console.error('External storage requested but EXTERNAL_VIDEO_SUPABASE_* not configured');
+      return new Response(
+        JSON.stringify({ error: 'External video storage not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const storageClient = useExternal ? externalStorage! : supabaseAdmin;
+    console.log(`Signing from ${useExternal ? 'EXTERNAL' : 'local'} bucket="${bucketForSigning}" path="${videoPath}"`);
+
 
     // For preview mode (share page), allow access without auth
     if (isPreview) {
       console.log("Generating preview URL (no auth required)");
       
       // Generate signed URL with 2 hour expiration
-      const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
-        .from("manivela_filmes")
+      const { data: signedUrlData, error: signedUrlError } = await storageClient.storage
+        .from(bucketForSigning)
         .createSignedUrl(videoPath, 7200); // 2 hours
 
       if (signedUrlError || !signedUrlData) {
@@ -234,8 +261,8 @@ Deno.serve(async (req) => {
     }
 
     // Generate signed URL with 2 hour expiration
-    const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
-      .from("manivela_filmes")
+    const { data: signedUrlData, error: signedUrlError } = await storageClient.storage
+      .from(bucketForSigning)
       .createSignedUrl(videoPath, 7200); // 2 hours
 
     if (signedUrlError || !signedUrlData) {

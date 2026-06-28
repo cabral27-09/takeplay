@@ -1,5 +1,8 @@
 project_id = "frakvusemijynkcfsywj"
 
+[functions.get-upload-config]
+verify_jwt = false
+
 [functions.get-video-url]
 verify_jwt = false
 
