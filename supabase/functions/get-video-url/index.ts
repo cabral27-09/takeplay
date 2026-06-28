@@ -83,28 +83,43 @@ Deno.serve(async (req) => {
     
     console.log(`Original video_url from database: ${movie.video_url}`);
     
-    // If it's a full URL, extract the path
+    // If it's a full URL, extract the path AND detect the source project/bucket
     if (videoPath.startsWith('http')) {
-      const patterns = [
-        '/storage/v1/object/public/manivela_filmes/',
-        '/storage/v1/object/sign/manivela_filmes/',
-        '/storage/v1/object/public/videos/',
-        '/storage/v1/object/sign/videos/',
+      const patterns: { pat: string; external: boolean; bucket: string }[] = [
+        { pat: '/storage/v1/object/public/manivela_filmes/', external: true, bucket: 'manivela_filmes' },
+        { pat: '/storage/v1/object/sign/manivela_filmes/',   external: true, bucket: 'manivela_filmes' },
+        { pat: '/storage/v1/object/public/videos/',           external: false, bucket: 'videos' },
+        { pat: '/storage/v1/object/sign/videos/',             external: false, bucket: 'videos' },
       ];
-      for (const pattern of patterns) {
-        if (videoPath.includes(pattern)) {
-          videoPath = videoPath.split(pattern)[1]?.split('?')[0] || videoPath;
+      for (const { pat, external, bucket } of patterns) {
+        if (videoPath.includes(pat)) {
+          videoPath = videoPath.split(pat)[1]?.split('?')[0] || videoPath;
+          useExternal = external;
+          bucketForSigning = bucket;
           break;
         }
       }
+    } else {
+      // Bare path (no http). Newly uploaded files live in the external manivela_filmes bucket.
+      useExternal = true;
+      bucketForSigning = 'manivela_filmes';
     }
-    
+
     // Remove leading slash if present
     if (videoPath.startsWith('/')) {
       videoPath = videoPath.substring(1);
     }
 
-    console.log(`Normalized video path for storage lookup: ${videoPath}`);
+    if (useExternal && !externalStorage) {
+      console.error('External storage requested but EXTERNAL_VIDEO_SUPABASE_* not configured');
+      return new Response(
+        JSON.stringify({ error: 'External video storage not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const storageClient = useExternal ? externalStorage! : supabaseAdmin;
+    console.log(`Signing from ${useExternal ? 'EXTERNAL' : 'local'} bucket="${bucketForSigning}" path="${videoPath}"`);
+
 
     // For preview mode (share page), allow access without auth
     if (isPreview) {
