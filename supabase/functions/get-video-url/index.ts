@@ -15,6 +15,10 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const extUrl = (Deno.env.get("EXTERNAL_VIDEO_SUPABASE_URL") || "")
+      .replace(/\/rest\/v1\/?$/, "")
+      .replace(/\/+$/, "");
+    const extKey = Deno.env.get("EXTERNAL_VIDEO_SUPABASE_ANON_KEY") || "";
 
     if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
       console.error("Missing environment variables");
@@ -27,8 +31,16 @@ Deno.serve(async (req) => {
     // Get the authorization header
     const authHeader = req.headers.get("Authorization");
     
-    // Create admin client for generating signed URLs
+    // Admin client (current project) for DB lookups + signing legacy `videos` bucket
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    // External anon client for the manivela_filmes bucket (new project)
+    const externalStorage = extUrl && extKey ? createClient(extUrl, extKey) : null;
+
+    // Decide which client/bucket to use based on the path's source
+    let useExternal = false;
+    let bucketForSigning = "videos";
+
 
     // Parse request body
     const { movieId, isPreview = false } = await req.json();
