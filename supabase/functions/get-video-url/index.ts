@@ -261,8 +261,8 @@ Deno.serve(async (req) => {
     }
 
     // Generate signed URL with 2 hour expiration
-    const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
-      .from("manivela_filmes")
+    const { data: signedUrlData, error: signedUrlError } = await storageClient.storage
+      .from(bucketForSigning)
       .createSignedUrl(videoPath, 7200); // 2 hours
 
     if (signedUrlError || !signedUrlData) {
