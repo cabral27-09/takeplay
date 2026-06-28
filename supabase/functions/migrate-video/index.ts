@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     const contentLength = dl.headers.get('content-length') || undefined
 
     // 3) Stream-upload to external bucket via Storage REST
-    const cleanBase = EXT_URL.replace(/\/+$/, '')
+    const cleanBase = EXT_URL.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '')
     const bucket = (body?.bucket as string) || 'manivela_filmes'
     const uploadUrl = `${cleanBase}/storage/v1/object/${bucket}/${path}`
     const up = await fetch(uploadUrl, {
