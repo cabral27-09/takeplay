@@ -1,43 +1,47 @@
-Apontar os uploads e a reprodução de vídeos para o **projeto Supabase externo** (bucket `manivela_filmes`), usando os secrets `EXTERNAL_VIDEO_SUPABASE_URL` e `EXTERNAL_VIDEO_SUPABASE_ANON_KEY` que você acabou de atualizar.
+## Diagnóstico
 
-## Arquivos alterados
+Verifiquei o banco e a lógica de acesso:
 
-### 1. `src/contexts/UploadContext.tsx` (upload TUS → projeto externo)
-- Adicionar `VITE_EXTERNAL_VIDEO_SUPABASE_URL` e `VITE_EXTERNAL_VIDEO_SUPABASE_ANON_KEY` em `.env` (cópias públicas necessárias porque o upload acontece no navegador).
-- Trocar o endpoint TUS de `${SUPABASE_URL}/storage/v1/upload/resumable` para `${EXTERNAL_URL}/storage/v1/upload/resumable`.
-- Trocar os headers `authorization` e `apikey` para usar a anon key do projeto externo (não há sessão de usuário no projeto externo — o acesso será controlado por policy de bucket).
-- Manter `bucketName: 'manivela_filmes'`, mesmo objectName, mesmo fluxo de progresso/pause/resume.
+- Os **5 usuários promovidos hoje** têm registros corretos em `admin_subscriptions` (`is_active=true`, `tier=premium`) — sem duplicatas.
+- **Todos os filmes publicados têm `min_tier='free'`** — nenhum é premium. Ou seja: a checagem de assinatura no `SubscriptionGate` e no `get-video-url` nem entra em jogo. Qualquer usuário logado tem acesso "full".
+- O erro relatado ("não foi possível carregar esse vídeo") vem do `useVideoUrl.ts` quando a função `get-video-url` retorna erro OU falha na assinatura da URL.
 
-### 2. `supabase/functions/get-video-url/index.ts` (signed URLs → projeto externo)
-- Criar um segundo client Supabase usando `EXTERNAL_VIDEO_SUPABASE_URL` + `EXTERNAL_VIDEO_SUPABASE_ANON_KEY`.
-- Quando o path do filme estiver no bucket `manivela_filmes` (ou for um path novo `movies/...`), assinar a URL pelo client externo.
-- Manter o client antigo (projeto atual) como fallback para filmes já cadastrados no bucket `videos`, para não quebrar nada que já existe.
+Como o problema afeta **todos os vídeos** dos usuários testados e o filtro por tier não interfere (todo conteúdo é free), o gargalo real é o **`createSignedUrl` no bucket externo `manivela_filmes`** — usado por todos os vídeos com path `movies/...`. A hipótese mais provável:
 
-### 3. Edge function `migrate-video`
-- Já está usando os secrets externos corretamente; nenhuma mudança de código necessária. Só vai voltar a funcionar quando você quiser migrar os filmes antigos (depois que a policy estiver no lugar).
+- A policy de leitura do bucket `manivela_filmes` no projeto externo não está aplicada corretamente para a `anon key`, então o `createSignedUrl` do cliente externo falha silenciosamente.
+- O motivo dos "premium antigos" funcionarem é apenas coincidência (não tentaram assistir hoje, ou já tinham URL assinada em cache).
 
-## O que VOCÊ precisa fazer no projeto externo
+## Plano de correção
 
-O projeto externo tem auth próprio e o navegador vai chamar o TUS como `anon`. Para o upload funcionar, rode este SQL no SQL Editor do **projeto externo** (onde está o bucket `manivela_filmes`):
+### 1. Logs detalhados no `get-video-url`
+Melhorar o log de erro do `createSignedUrl` para gravar o objeto de erro completo (status, mensagem) nos logs da edge function, para que a próxima falha apareça em `edge_function_logs`.
+
+### 2. Usar service_role do projeto externo para assinar
+Assinar URLs com o `service_role` do projeto externo (não com a anon key). Service role bypassa RLS e é o padrão correto para signed URLs em edge functions. Precisarei do secret:
+
+- `EXTERNAL_VIDEO_SUPABASE_SERVICE_ROLE_KEY` — a service role key do projeto externo (Supabase → Project Settings → API → `service_role` secret)
+
+Se estiver disponível, substituo o `extKey` do signing por essa chave (mantendo o anon key só para uploads TUS, que precisam ir como `authenticated` ou `anon` com policy de INSERT).
+
+### 3. Confirmar as policies no projeto externo
+As policies enviadas antes precisavam ser rodadas no SQL editor do projeto externo:
 
 ```sql
--- Permite upload anônimo SOMENTE no bucket manivela_filmes
-CREATE POLICY "anon upload manivela_filmes"
-ON storage.objects FOR INSERT TO anon
-WITH CHECK (bucket_id = 'manivela_filmes');
-
--- Permite leitura anônima (necessária para signed URL / play)
-CREATE POLICY "anon read manivela_filmes"
-ON storage.objects FOR SELECT TO anon
-USING (bucket_id = 'manivela_filmes');
+CREATE POLICY "anon upload manivela_filmes" ON storage.objects
+  FOR INSERT TO anon WITH CHECK (bucket_id = 'manivela_filmes');
+CREATE POLICY "anon read manivela_filmes" ON storage.objects
+  FOR SELECT TO anon USING (bucket_id = 'manivela_filmes');
 ```
 
-> Observação: isso libera upload anônimo nesse bucket. Como o site só expõe o uploader para admins/produtores logados aqui no app, na prática só eles veem o botão. Se você quiser restringir de verdade no servidor externo, depois a gente troca para um esquema com Edge Function assinando uploads (mais complexo, mas mais seguro).
+Se você já rodou, ótimo. Se não, precisamos rodar antes de qualquer nova tentativa.
 
-## O que NÃO vou mexer
+### 4. Não mexer
+- Nada do fluxo de assinatura / `admin_subscriptions` / `check-subscription` (já está correto).
+- Nada do frontend `SubscriptionGate` / `AuthContext`.
+- Nada do bucket local `videos` nem dos vídeos antigos.
 
-- Não vou alterar nada na base do projeto atual.
-- Não vou apagar o bucket `videos` nem os filmes antigos.
-- Não vou tocar em auth, RLS de outras tabelas, ou no `supabase/config.toml`.
+## O que preciso de você
 
-Quando você aprovar, eu já aplico as 3 mudanças de código. A migração dos filmes antigos para o novo bucket fica para um passo separado, quando você quiser.
+1. Confirmar se **rodou as duas policies acima no projeto externo**.
+2. Pegar a **service_role key** do projeto externo para eu adicionar como secret `EXTERNAL_VIDEO_SUPABASE_SERVICE_ROLE_KEY`.
+3. Assim que aprovar o plano, quando um usuário afetado tentar assistir de novo, os logs vão mostrar o erro real do storage e conseguiremos confirmar a causa em vez de adivinhar.
