@@ -135,7 +135,15 @@ Deno.serve(async (req) => {
         .createSignedUrl(videoPath, 7200); // 2 hours
 
       if (signedUrlError || !signedUrlData) {
-        console.error("Error generating signed URL:", signedUrlError);
+        console.error("Error generating preview signed URL:", JSON.stringify({
+          error: signedUrlError,
+          message: (signedUrlError as any)?.message,
+          name: (signedUrlError as any)?.name,
+          status: (signedUrlError as any)?.status,
+          bucket: bucketForSigning,
+          path: videoPath,
+          useExternal,
+        }));
         return new Response(
           JSON.stringify({ error: "Failed to generate video URL" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
