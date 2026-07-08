@@ -18,7 +18,10 @@ Deno.serve(async (req) => {
     const extUrl = (Deno.env.get("EXTERNAL_VIDEO_SUPABASE_URL") || "")
       .replace(/\/rest\/v1\/?$/, "")
       .replace(/\/+$/, "");
-    const extKey = Deno.env.get("EXTERNAL_VIDEO_SUPABASE_ANON_KEY") || "";
+    const extAnonKey = Deno.env.get("EXTERNAL_VIDEO_SUPABASE_ANON_KEY") || "";
+    const extServiceKey = Deno.env.get("EXTERNAL_VIDEO_SUPABASE_SERVICE_ROLE_KEY") || "";
+    // Prefer service_role for signing (bypasses RLS); fall back to anon if not set.
+    const extSigningKey = extServiceKey || extAnonKey;
 
     if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
       console.error("Missing environment variables");
@@ -34,8 +37,9 @@ Deno.serve(async (req) => {
     // Admin client (current project) for DB lookups + signing legacy `videos` bucket
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // External anon client for the manivela_filmes bucket (new project)
-    const externalStorage = extUrl && extKey ? createClient(extUrl, extKey) : null;
+    // External storage client for the manivela_filmes bucket (new project)
+    const externalStorage = extUrl && extSigningKey ? createClient(extUrl, extSigningKey) : null;
+    console.log(`External storage configured: ${!!externalStorage}, using ${extServiceKey ? "service_role" : "anon"} key`);
 
     // Decide which client/bucket to use based on the path's source
     let useExternal = false;
@@ -131,7 +135,15 @@ Deno.serve(async (req) => {
         .createSignedUrl(videoPath, 7200); // 2 hours
 
       if (signedUrlError || !signedUrlData) {
-        console.error("Error generating signed URL:", signedUrlError);
+        console.error("Error generating preview signed URL:", JSON.stringify({
+          error: signedUrlError,
+          message: (signedUrlError as any)?.message,
+          name: (signedUrlError as any)?.name,
+          status: (signedUrlError as any)?.status,
+          bucket: bucketForSigning,
+          path: videoPath,
+          useExternal,
+        }));
         return new Response(
           JSON.stringify({ error: "Failed to generate video URL" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -266,7 +278,15 @@ Deno.serve(async (req) => {
       .createSignedUrl(videoPath, 7200); // 2 hours
 
     if (signedUrlError || !signedUrlData) {
-      console.error("Error generating signed URL:", signedUrlError);
+      console.error("Error generating signed URL:", JSON.stringify({
+        error: signedUrlError,
+        message: (signedUrlError as any)?.message,
+        name: (signedUrlError as any)?.name,
+        status: (signedUrlError as any)?.status,
+        bucket: bucketForSigning,
+        path: videoPath,
+        useExternal,
+      }));
       return new Response(
         JSON.stringify({ error: "Failed to generate video URL" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
