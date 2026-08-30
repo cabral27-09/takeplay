@@ -198,14 +198,11 @@ export default function ProducerUploadMovie() {
     }
     // Validation for adding episode
     else if (isAddingEpisode) {
-      if (!episodeTitle.trim()) {
-        toast({ title: 'Erro de validação', description: 'O título do episódio é obrigatório.', variant: 'destructive' });
-        return;
-      }
       if (!formData.video_url) {
         toast({ title: 'Erro de validação', description: 'O vídeo do episódio é obrigatório.', variant: 'destructive' });
         return;
       }
+
       if (!formData.season_number || formData.season_number < 1) {
         toast({ title: 'Erro de validação', description: 'Informe qual temporada é este episódio.', variant: 'destructive' });
         return;
