@@ -1,20 +1,19 @@
-# Auth apenas com e-mail e senha
-
-Manter só o login nativo do backend (Supabase Auth) e remover o acesso via Google.
+# Seleção de séries em Bottom Sheet
 
 ## O que muda
 
-- Remoção do botão "Continuar com Google" e do divisor "ou" na tela de login/cadastro (`src/pages/Auth.tsx`), junto com o estado e o tratamento de erro específicos desse fluxo.
-- Desativação do provedor Google na configuração de autenticação do backend, para que ninguém consiga iniciar o fluxo por URL direta.
-- O restante do fluxo continua igual: cadastro e login por e-mail/senha, criação automática de perfil e papel (viewer/producer) e o redirecionamento para a página que o usuário tentou acessar.
+Ao clicar no card de uma série (conteúdo com `content_type = serie` e sem série-pai), em vez de navegar para a página de detalhe, abre um Bottom Sheet sobreposto à tela atual:
 
-## O que não muda
+- Topo: nome da série e as temporadas como abas horizontais (Temporada 1, 2, 3...).
+- Abaixo: lista dos episódios da temporada selecionada, nomeados "Episódio 1", "Episódio 2", etc., com miniatura, duração e sinopse quando existirem.
+- Trocar de aba atualiza a lista instantaneamente, sem recarregar nem abrir página.
+- Clicar num episódio leva direto ao player (`/watch/:id`), como já acontece hoje.
 
-- Contas já existentes continuam funcionando. Quem entrou antes com Google mantém o cadastro no backend com o mesmo e-mail; para voltar a acessar, precisará usar "esqueci minha senha" e definir uma senha.
-- Perfis, papéis, assinaturas e permissões permanecem intactos.
+Filmes e espetáculos continuam abrindo a página de detalhe normalmente. Nenhuma outra parte do sistema muda.
 
 ## Detalhes técnicos
 
-- `src/pages/Auth.tsx`: remover o bloco OAuth (botão, `isGoogleLoading`, chamada `lovable.auth.signInWithOAuth`) mantendo a lógica de `sessionStorage` do destino pós-login.
-- Backend: desabilitar o provedor Google via configuração de social auth.
-- O helper `src/integrations/lovable/index.ts` fica como está (não é usado por mais nada no login).
+- Novo componente `src/components/series/SeriesBottomSheet.tsx` usando o `Sheet` existente (`side="bottom"`), reaproveitando o hook `useSeriesEpisodes` e os componentes `Tabs`, `Skeleton` e `Button` já presentes.
+- A lista de episódios reutiliza o mesmo layout de item já existente em `SeasonEpisodeList` (miniatura + título + duração), apenas com o rótulo "Episódio N".
+- `src/components/movies/MovieCard.tsx`: quando o item for uma série, o card passa a abrir o sheet (botão com o mesmo visual atual) em vez de usar `Link`; o restante do card fica idêntico.
+- Sem mudanças de banco, backend, rotas ou tokens de design.
