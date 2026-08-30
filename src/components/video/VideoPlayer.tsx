@@ -61,6 +61,7 @@ export function VideoPlayer({
   const containerRef = useRef<HTMLDivElement>(null);
   const rafIdRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
+  const lastLocalSaveRef = useRef<number>(0);
   const watchedSecondsRef = useRef<number>(0);
   
   // Casting hooks
