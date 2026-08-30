@@ -373,30 +373,8 @@ export default function MovieForm() {
                 {formData.series_id && (
                   <div className="space-y-4 pt-4 border-t border-border/50">
                     <h3 className="text-md font-semibold">Dados do Episódio</h3>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="episode_title">Título do Episódio *</Label>
-                      <Input
-                        id="episode_title"
-                        value={episodeTitle}
-                        onChange={(e) => setEpisodeTitle(e.target.value)}
-                        placeholder="Ex: O Início"
-                        required
-                      />
-                    </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="episode_synopsis">Sinopse do Episódio</Label>
-                      <Textarea
-                        id="episode_synopsis"
-                        value={episodeSynopsis}
-                        onChange={(e) => setEpisodeSynopsis(e.target.value)}
-                        placeholder="Descrição deste episódio..."
-                        rows={3}
-                      />
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-2">
                         <Label htmlFor="season_number">Temporada *</Label>
                         <Input
@@ -422,31 +400,14 @@ export default function MovieForm() {
                           placeholder="Ex: 1"
                         />
                       </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="episode_duration">Duração (min) *</Label>
-                        <Input
-                          id="episode_duration"
-                          type="number"
-                          min={1}
-                          max={600}
-                          value={episodeDuration}
-                          onChange={(e) => setEpisodeDuration(parseInt(e.target.value) || 0)}
-                          placeholder="Ex: 45"
-                        />
-                      </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Capa do Episódio (opcional)</Label>
-                      <ImageUploader
-                        value={episodeThumbnail}
-                        onChange={(url) => setEpisodeThumbnail(url)}
-                        aspectRatio="backdrop"
-                      />
-                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      O episódio será salvo como "Episódio {formData.current_episode || 1}" e herdará capa, sinopse e demais dados da série.
+                    </p>
                   </div>
                 )}
+
 
                 {/* Series metadata - only show for parent series */}
                 {!formData.series_id && (
