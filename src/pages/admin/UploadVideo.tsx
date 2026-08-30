@@ -43,10 +43,8 @@ export default function UploadVideo() {
   const { data: selectedSeriesData } = useSeriesParent(selectedSeriesId || undefined);
 
   // Episode fields
-  const [episodeTitle, setEpisodeTitle] = useState('');
-  const [episodeSynopsis, setEpisodeSynopsis] = useState('');
   const [episodeDuration, setEpisodeDuration] = useState<number>(30);
-  const [episodeThumbnail, setEpisodeThumbnail] = useState('');
+
   const [seasonNumber, setSeasonNumber] = useState<number | null>(1);
   const [currentEpisode, setCurrentEpisode] = useState<number | null>(1);
 
@@ -93,22 +91,24 @@ export default function UploadVideo() {
         toast({ title: 'Erro', description: 'Selecione a série para vincular o episódio.', variant: 'destructive' });
         return;
       }
-      if (!episodeTitle.trim()) {
-        toast({ title: 'Erro', description: 'O título do episódio é obrigatório.', variant: 'destructive' });
+      if (!seasonNumber || !currentEpisode) {
+        toast({ title: 'Erro', description: 'Informe a temporada e o número do episódio.', variant: 'destructive' });
         return;
       }
 
+      const autoTitle = `Episódio ${currentEpisode}`;
+
       try {
         await createMovie.mutateAsync({
-          title: episodeTitle,
-          synopsis: episodeSynopsis,
+          title: autoTitle,
+          synopsis: '',
           year: selectedSeriesData?.year || year,
           duration: episodeDuration,
           rating: 0,
           status: 'published',
           featured: false,
           min_tier: selectedSeriesData?.min_tier || 'free',
-          thumbnail_url: episodeThumbnail || selectedSeriesData?.thumbnail_url || '',
+          thumbnail_url: selectedSeriesData?.thumbnail_url || '',
           backdrop_url: selectedSeriesData?.backdrop_url || '',
           video_url: videoUrl,
           trailer_url: '',
@@ -125,7 +125,8 @@ export default function UploadVideo() {
           series_id: selectedSeriesId,
         });
 
-        toast({ title: 'Episódio adicionado', description: `"${episodeTitle}" foi vinculado à série com sucesso.` });
+        toast({ title: 'Episódio adicionado', description: `"${autoTitle}" foi vinculado à série com sucesso.` });
+
         navigate('/admin/movies');
       } catch (error) {
         console.error('Error adding episode:', error);
@@ -245,16 +246,6 @@ export default function UploadVideo() {
                   <div className="space-y-4 pt-4 border-t border-border/50">
                     <h3 className="text-md font-semibold">Dados do Episódio</h3>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="ep_title">Título do Episódio *</Label>
-                      <Input id="ep_title" value={episodeTitle} onChange={(e) => setEpisodeTitle(e.target.value)} placeholder="Ex: A Ilha" required />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="ep_synopsis">Sinopse do Episódio</Label>
-                      <Textarea id="ep_synopsis" value={episodeSynopsis} onChange={(e) => setEpisodeSynopsis(e.target.value)} placeholder="Descrição deste episódio..." rows={3} />
-                    </div>
-
                     <div className="grid gap-4 md:grid-cols-3">
                       <div className="space-y-2">
                         <Label htmlFor="ep_season">Temporada *</Label>
@@ -270,12 +261,12 @@ export default function UploadVideo() {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Capa do Episódio (opcional)</Label>
-                      <ImageUploader value={episodeThumbnail} onChange={setEpisodeThumbnail} aspectRatio="backdrop" />
-                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      O episódio será salvo como "Episódio {currentEpisode || 1}" e usará a capa e a sinopse da série.
+                    </p>
                   </div>
                 )}
+
               </div>
             )}
 
