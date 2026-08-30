@@ -1,14 +1,18 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Play, Info, Star } from 'lucide-react';
 import { MovieWithGenres } from '@/types/movie';
 import { Button } from '@/components/ui/button';
+import { SeriesBottomSheet } from '@/components/series/SeriesBottomSheet';
 
 interface HeroSectionProps {
   movie: MovieWithGenres;
 }
 
 export const HeroSection = ({ movie }: HeroSectionProps) => {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const isSeries = movie.content_type === 'serie' && !movie.series_id;
   const backdrop = movie.backdrop_url || movie.thumbnail_url || '/placeholder.svg';
 
   return (
@@ -113,6 +117,10 @@ export const HeroSection = ({ movie }: HeroSectionProps) => {
 
       {/* Bottom Fade */}
       <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-cinema-black to-transparent" />
+
+      {isSeries && (
+        <SeriesBottomSheet series={movie} open={sheetOpen} onOpenChange={setSheetOpen} />
+      )}
     </section>
   );
 };
