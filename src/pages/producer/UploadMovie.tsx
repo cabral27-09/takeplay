@@ -579,17 +579,6 @@ export default function ProducerUploadMovie() {
                         <h3 className="text-md font-semibold">Dados do Episódio</h3>
 
                         <div className="grid gap-4 md:grid-cols-2">
-                          <div className="space-y-2 md:col-span-2">
-                            <Label htmlFor="episode_title">Título do Episódio *</Label>
-                            <Input
-                              id="episode_title"
-                              value={episodeTitle}
-                              onChange={(e) => setEpisodeTitle(e.target.value)}
-                              placeholder="Ex: O Começo de Tudo"
-                              required
-                            />
-                          </div>
-
                           <div className="space-y-2">
                             <Label htmlFor="season_number">Temporada *</Label>
                             <Input
@@ -615,29 +604,12 @@ export default function ProducerUploadMovie() {
                               placeholder="Ex: 1"
                             />
                           </div>
-
-                          <div className="space-y-2">
-                            <Label htmlFor="episode_duration">Duração (minutos) *</Label>
-                            <Input
-                              id="episode_duration"
-                              type="number"
-                              min={1}
-                              max={600}
-                              value={episodeDuration}
-                              onChange={(e) => setEpisodeDuration(parseInt(e.target.value) || 0)}
-                              placeholder="Ex: 45"
-                            />
-                          </div>
                         </div>
 
-                        <div className="space-y-2">
-                          <Label>Capa do Episódio (opcional — usa a da série se vazio)</Label>
-                          <ImageUploader
-                            value={episodeThumbnail}
-                            onChange={(url) => setEpisodeThumbnail(url)}
-                            aspectRatio="thumbnail"
-                          />
-                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          O episódio será salvo como "Episódio {formData.current_episode || 1}" e herdará capa, sinopse e demais dados da série.
+                        </p>
+
 
                         <div className="space-y-2">
                           <Label>Vídeo do Episódio *</Label>
