@@ -4,7 +4,7 @@
 
 Ao clicar no card de uma série (conteúdo com `content_type = serie` e sem série-pai), em vez de navegar para a página de detalhe, abre um Bottom Sheet sobreposto à tela atual:
 
-- Cabeçalho: nome da série e botões de temporada (Temporada 1, 2, 3...), no estilo dos botões já usados nos filtros do site.
+- Cabeçalho: imagem de capa, título e sinopse da série, e abaixo os botões de temporada (Temporada 1, 2, 3...), no estilo dos botões já usados nos filtros do site.
 - Corpo: grade de botões de episódio, apenas com o texto "EPISÓDIO 1", "EPISÓDIO 2", etc. Sem miniatura, sem duração, sem sinopse.
 - Cada botão de episódio funciona também como barra de progresso: um preenchimento no fundo do botão mostra quanto daquele episódio o usuário já assistiu (metade assistida = metade preenchida). Episódio concluído aparece totalmente preenchido.
 - Trocar de temporada atualiza a grade instantaneamente.
