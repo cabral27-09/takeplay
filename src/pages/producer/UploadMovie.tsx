@@ -290,17 +290,18 @@ export default function ProducerUploadMovie() {
   };
 
   const handleSaveDraft = async () => {
-    if (!formData.title.trim() && !episodeTitle.trim()) {
+    if (!isAddingEpisode && !formData.title.trim()) {
       toast({ title: 'Erro de validação', description: 'O título é obrigatório para salvar como rascunho.', variant: 'destructive' });
       return;
     }
 
     try {
-      const title = isAddingEpisode ? episodeTitle : formData.title;
+      const title = isAddingEpisode ? `Episódio ${formData.current_episode || 1}` : formData.title;
       const draftData: MovieFormData = {
         ...formData,
         title: title,
-        ...(isAddingEpisode ? { duration: episodeDuration, thumbnail_url: episodeThumbnail || formData.thumbnail_url } : {}),
+        ...(isAddingEpisode ? { synopsis: '' } : {}),
+
         status: 'draft',
         producer_name: profile?.full_name || formData.producer_name,
         ...(isCreatingSeriesParent ? { video_url: '' } : {}),
