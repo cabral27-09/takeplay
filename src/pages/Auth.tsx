@@ -46,9 +46,13 @@ export default function Auth() {
 
   useEffect(() => {
     if (user && !isLoading) {
-      navigate(redirectTo);
+      const stored = sessionStorage.getItem('post_auth_redirect');
+      sessionStorage.removeItem('post_auth_redirect');
+      const target = stored && stored.startsWith('/') && !stored.startsWith('//') ? stored : redirectTo;
+      navigate(target, { replace: true });
     }
   }, [user, isLoading, navigate, redirectTo]);
+
 
   const validateForm = () => {
     try {
