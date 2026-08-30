@@ -24,9 +24,18 @@ const TIER_LEVELS: Record<MovieTier, number> = {
 };
 
 export function SubscriptionGate({ children, movieTitle, movieTier = 'premium' }: SubscriptionGateProps) {
-  const { user, subscription, isLoading, isSubscriptionLoading } = useAuth();
+  const { user, subscription, isLoading, isSubscriptionLoading, checkSubscription } = useAuth();
   const navigate = useNavigate();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+
+  // Revalida a assinatura ao abrir o conteúdo, para refletir promoções recentes na hora
+  useEffect(() => {
+    if (user && !subscription.subscribed) {
+      checkSubscription();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
 
   const handleSubscribe = async () => {
     if (!user) {
