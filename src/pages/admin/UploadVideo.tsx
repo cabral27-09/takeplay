@@ -93,22 +93,24 @@ export default function UploadVideo() {
         toast({ title: 'Erro', description: 'Selecione a série para vincular o episódio.', variant: 'destructive' });
         return;
       }
-      if (!episodeTitle.trim()) {
-        toast({ title: 'Erro', description: 'O título do episódio é obrigatório.', variant: 'destructive' });
+      if (!seasonNumber || !currentEpisode) {
+        toast({ title: 'Erro', description: 'Informe a temporada e o número do episódio.', variant: 'destructive' });
         return;
       }
 
+      const autoTitle = `Episódio ${currentEpisode}`;
+
       try {
         await createMovie.mutateAsync({
-          title: episodeTitle,
-          synopsis: episodeSynopsis,
+          title: autoTitle,
+          synopsis: '',
           year: selectedSeriesData?.year || year,
           duration: episodeDuration,
           rating: 0,
           status: 'published',
           featured: false,
           min_tier: selectedSeriesData?.min_tier || 'free',
-          thumbnail_url: episodeThumbnail || selectedSeriesData?.thumbnail_url || '',
+          thumbnail_url: selectedSeriesData?.thumbnail_url || '',
           backdrop_url: selectedSeriesData?.backdrop_url || '',
           video_url: videoUrl,
           trailer_url: '',
@@ -125,7 +127,8 @@ export default function UploadVideo() {
           series_id: selectedSeriesId,
         });
 
-        toast({ title: 'Episódio adicionado', description: `"${episodeTitle}" foi vinculado à série com sucesso.` });
+        toast({ title: 'Episódio adicionado', description: `"${autoTitle}" foi vinculado à série com sucesso.` });
+
         navigate('/admin/movies');
       } catch (error) {
         console.error('Error adding episode:', error);
