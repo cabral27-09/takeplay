@@ -64,11 +64,6 @@ export default function MovieForm() {
     series_id: null,
   });
 
-  // Episode-specific state (used when adding episode to existing series)
-  const [episodeTitle, setEpisodeTitle] = useState('');
-  const [episodeSynopsis, setEpisodeSynopsis] = useState('');
-  const [episodeDuration, setEpisodeDuration] = useState<number>(30);
-  const [episodeThumbnail, setEpisodeThumbnail] = useState('');
 
   // Fetch genres based on content type - must be after formData declaration
   const { data: genres, isLoading: genresLoading } = useGenresByContentType(formData.content_type);
@@ -171,10 +166,10 @@ export default function MovieForm() {
 
     // When adding episode, validate episode-specific fields
     if (isAddingEpisode && !isEditing) {
-      if (!episodeTitle.trim()) {
+      if (!formData.season_number || !formData.current_episode) {
         toast({
           title: 'Erro de validação',
-          description: 'O título do episódio é obrigatório.',
+          description: 'Informe a temporada e o número do episódio.',
           variant: 'destructive',
         });
         return;
@@ -204,13 +199,17 @@ export default function MovieForm() {
       submitData.video_url = '';
     }
     
-    // Episode: use episode-specific fields
+    // Episode: inherit everything from the parent series
     if (isAddingEpisode && !isEditing) {
-      submitData.title = episodeTitle;
-      submitData.synopsis = episodeSynopsis;
-      submitData.duration = episodeDuration;
-      submitData.thumbnail_url = episodeThumbnail || formData.thumbnail_url;
+      submitData.title = `Episódio ${formData.current_episode}`;
+      submitData.synopsis = '';
+      submitData.status = 'published';
+      submitData.featured = false;
+      submitData.duration = selectedSeriesData?.duration || formData.duration;
+      submitData.thumbnail_url = selectedSeriesData?.thumbnail_url || formData.thumbnail_url;
+      submitData.backdrop_url = selectedSeriesData?.backdrop_url || formData.backdrop_url;
     }
+
 
     const contentLabel = isCreatingSeriesParent ? 'Série' : isAddingEpisode ? 'Episódio' : formData.content_type === 'espetaculo' ? 'Espetáculo' : 'Filme';
 
@@ -369,30 +368,8 @@ export default function MovieForm() {
                 {formData.series_id && (
                   <div className="space-y-4 pt-4 border-t border-border/50">
                     <h3 className="text-md font-semibold">Dados do Episódio</h3>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="episode_title">Título do Episódio *</Label>
-                      <Input
-                        id="episode_title"
-                        value={episodeTitle}
-                        onChange={(e) => setEpisodeTitle(e.target.value)}
-                        placeholder="Ex: O Início"
-                        required
-                      />
-                    </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="episode_synopsis">Sinopse do Episódio</Label>
-                      <Textarea
-                        id="episode_synopsis"
-                        value={episodeSynopsis}
-                        onChange={(e) => setEpisodeSynopsis(e.target.value)}
-                        placeholder="Descrição deste episódio..."
-                        rows={3}
-                      />
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-2">
                         <Label htmlFor="season_number">Temporada *</Label>
                         <Input
@@ -418,31 +395,14 @@ export default function MovieForm() {
                           placeholder="Ex: 1"
                         />
                       </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="episode_duration">Duração (min) *</Label>
-                        <Input
-                          id="episode_duration"
-                          type="number"
-                          min={1}
-                          max={600}
-                          value={episodeDuration}
-                          onChange={(e) => setEpisodeDuration(parseInt(e.target.value) || 0)}
-                          placeholder="Ex: 45"
-                        />
-                      </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Capa do Episódio (opcional)</Label>
-                      <ImageUploader
-                        value={episodeThumbnail}
-                        onChange={(url) => setEpisodeThumbnail(url)}
-                        aspectRatio="backdrop"
-                      />
-                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      O episódio será salvo como "Episódio {formData.current_episode || 1}" e herdará capa, sinopse e demais dados da série.
+                    </p>
                   </div>
                 )}
+
 
                 {/* Series metadata - only show for parent series */}
                 {!formData.series_id && (
@@ -478,6 +438,8 @@ export default function MovieForm() {
             )}
 
             {/* Basic Info */}
+            {!isAddingEpisode && (<>
+
             <div className="space-y-4">
               <div className="flex items-center gap-2 border-b border-border pb-2">
                 <h2 className="text-lg font-semibold">
@@ -645,6 +607,9 @@ export default function MovieForm() {
                 ))}
               </div>
             </div>
+            </>)}
+
+
 
             {/* Media */}
             <div className="space-y-4">
@@ -657,6 +622,7 @@ export default function MovieForm() {
                 )}
               </div>
               
+              {!isAddingEpisode && (
               <div className={`grid gap-6 md:grid-cols-2 ${isExistingSeriesSelected ? 'opacity-60 pointer-events-none' : ''}`}>
                 <div className="space-y-2">
                   <Label>Thumbnail (2:3)</Label>
@@ -676,6 +642,8 @@ export default function MovieForm() {
                   />
                 </div>
               </div>
+              )}
+
 
               {!isCreatingSeriesParent && (
                 <div className="space-y-2">
@@ -693,6 +661,7 @@ export default function MovieForm() {
                 </div>
               )}
 
+              {!isAddingEpisode && (
               <div className="space-y-2">
                 <Label htmlFor="trailer_url">
                   URL do Trailer (YouTube Embed)
@@ -707,9 +676,12 @@ export default function MovieForm() {
                   className={isExistingSeriesSelected ? 'bg-muted' : ''}
                 />
               </div>
+              )}
+
             </div>
 
             {/* Access & Status */}
+            {!isAddingEpisode && (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold border-b border-border pb-2">
                 Acesso e Publicação
@@ -771,6 +743,8 @@ export default function MovieForm() {
                 </Label>
               </div>
             </div>
+            )}
+
 
             {/* Submit */}
             <div className="flex items-center gap-4 pt-4 border-t border-border">

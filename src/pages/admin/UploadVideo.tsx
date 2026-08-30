@@ -43,7 +43,7 @@ export default function UploadVideo() {
   const { data: selectedSeriesData } = useSeriesParent(selectedSeriesId || undefined);
 
   // Episode fields
-  const [episodeDuration, setEpisodeDuration] = useState<number>(30);
+  const episodeDuration = 30;
 
   const [seasonNumber, setSeasonNumber] = useState<number | null>(1);
   const [currentEpisode, setCurrentEpisode] = useState<number | null>(1);
@@ -246,7 +246,7 @@ export default function UploadVideo() {
                   <div className="space-y-4 pt-4 border-t border-border/50">
                     <h3 className="text-md font-semibold">Dados do Episódio</h3>
 
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-2">
                         <Label htmlFor="ep_season">Temporada *</Label>
                         <Input id="ep_season" type="number" min={1} max={100} value={seasonNumber || ''} onChange={(e) => setSeasonNumber(parseInt(e.target.value) || null)} placeholder="1" />
@@ -255,11 +255,8 @@ export default function UploadVideo() {
                         <Label htmlFor="ep_number">Episódio *</Label>
                         <Input id="ep_number" type="number" min={1} max={999} value={currentEpisode || ''} onChange={(e) => setCurrentEpisode(parseInt(e.target.value) || null)} placeholder="1" />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="ep_duration">Duração (min) *</Label>
-                        <Input id="ep_duration" type="number" min={1} max={600} value={episodeDuration} onChange={(e) => setEpisodeDuration(parseInt(e.target.value) || 0)} placeholder="45" />
-                      </div>
                     </div>
+
 
                     <p className="text-sm text-muted-foreground">
                       O episódio será salvo como "Episódio {currentEpisode || 1}" e usará a capa e a sinopse da série.

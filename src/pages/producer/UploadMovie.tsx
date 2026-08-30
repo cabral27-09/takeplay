@@ -78,10 +78,6 @@ export default function ProducerUploadMovie() {
     series_id: null,
   });
 
-  // Episode-specific fields (only used when adding episode to existing series)
-  const [episodeTitle, setEpisodeTitle] = useState('');
-  const [episodeDuration, setEpisodeDuration] = useState(30);
-  const [episodeThumbnail, setEpisodeThumbnail] = useState('');
 
   const { data: genres, isLoading: genresLoading } = useGenresByContentType(formData.content_type);
   const { data: producerSeries, isLoading: producerSeriesLoading } = useProducerSeriesList(profile?.full_name);
@@ -134,9 +130,6 @@ export default function ProducerUploadMovie() {
     if (seriesMode === 'new') {
       setSelectedSeriesId(null);
       setFormData(prev => ({ ...prev, series_id: null }));
-      setEpisodeTitle('');
-      setEpisodeDuration(30);
-      setEpisodeThumbnail('');
     }
   }, [seriesMode]);
 
@@ -198,14 +191,11 @@ export default function ProducerUploadMovie() {
     }
     // Validation for adding episode
     else if (isAddingEpisode) {
-      if (!episodeTitle.trim()) {
-        toast({ title: 'Erro de validação', description: 'O título do episódio é obrigatório.', variant: 'destructive' });
-        return;
-      }
       if (!formData.video_url) {
         toast({ title: 'Erro de validação', description: 'O vídeo do episódio é obrigatório.', variant: 'destructive' });
         return;
       }
+
       if (!formData.season_number || formData.season_number < 1) {
         toast({ title: 'Erro de validação', description: 'Informe qual temporada é este episódio.', variant: 'destructive' });
         return;
@@ -253,9 +243,9 @@ export default function ProducerUploadMovie() {
         // Create episode record linked to series parent
         const submitData: MovieFormData = {
           ...formData,
-          title: episodeTitle, // Episode has its own title
-          duration: episodeDuration,
-          thumbnail_url: episodeThumbnail || formData.thumbnail_url, // Episode can have its own cover
+          title: `Episódio ${formData.current_episode}`,
+          synopsis: '',
+
           status: 'pending_review',
           producer_name: profile?.full_name || formData.producer_name,
         };
@@ -293,17 +283,18 @@ export default function ProducerUploadMovie() {
   };
 
   const handleSaveDraft = async () => {
-    if (!formData.title.trim() && !episodeTitle.trim()) {
+    if (!isAddingEpisode && !formData.title.trim()) {
       toast({ title: 'Erro de validação', description: 'O título é obrigatório para salvar como rascunho.', variant: 'destructive' });
       return;
     }
 
     try {
-      const title = isAddingEpisode ? episodeTitle : formData.title;
+      const title = isAddingEpisode ? `Episódio ${formData.current_episode || 1}` : formData.title;
       const draftData: MovieFormData = {
         ...formData,
         title: title,
-        ...(isAddingEpisode ? { duration: episodeDuration, thumbnail_url: episodeThumbnail || formData.thumbnail_url } : {}),
+        ...(isAddingEpisode ? { synopsis: '' } : {}),
+
         status: 'draft',
         producer_name: profile?.full_name || formData.producer_name,
         ...(isCreatingSeriesParent ? { video_url: '' } : {}),
@@ -579,17 +570,6 @@ export default function ProducerUploadMovie() {
                         <h3 className="text-md font-semibold">Dados do Episódio</h3>
 
                         <div className="grid gap-4 md:grid-cols-2">
-                          <div className="space-y-2 md:col-span-2">
-                            <Label htmlFor="episode_title">Título do Episódio *</Label>
-                            <Input
-                              id="episode_title"
-                              value={episodeTitle}
-                              onChange={(e) => setEpisodeTitle(e.target.value)}
-                              placeholder="Ex: O Começo de Tudo"
-                              required
-                            />
-                          </div>
-
                           <div className="space-y-2">
                             <Label htmlFor="season_number">Temporada *</Label>
                             <Input
@@ -615,29 +595,12 @@ export default function ProducerUploadMovie() {
                               placeholder="Ex: 1"
                             />
                           </div>
-
-                          <div className="space-y-2">
-                            <Label htmlFor="episode_duration">Duração (minutos) *</Label>
-                            <Input
-                              id="episode_duration"
-                              type="number"
-                              min={1}
-                              max={600}
-                              value={episodeDuration}
-                              onChange={(e) => setEpisodeDuration(parseInt(e.target.value) || 0)}
-                              placeholder="Ex: 45"
-                            />
-                          </div>
                         </div>
 
-                        <div className="space-y-2">
-                          <Label>Capa do Episódio (opcional — usa a da série se vazio)</Label>
-                          <ImageUploader
-                            value={episodeThumbnail}
-                            onChange={(url) => setEpisodeThumbnail(url)}
-                            aspectRatio="thumbnail"
-                          />
-                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          O episódio será salvo como "Episódio {formData.current_episode || 1}" e herdará capa, sinopse e demais dados da série.
+                        </p>
+
 
                         <div className="space-y-2">
                           <Label>Vídeo do Episódio *</Label>
