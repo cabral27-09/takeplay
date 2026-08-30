@@ -4,16 +4,22 @@
 
 Ao clicar no card de uma série (conteúdo com `content_type = serie` e sem série-pai), em vez de navegar para a página de detalhe, abre um Bottom Sheet sobreposto à tela atual:
 
-- Topo: nome da série e as temporadas como abas horizontais (Temporada 1, 2, 3...).
-- Abaixo: lista dos episódios da temporada selecionada, nomeados "Episódio 1", "Episódio 2", etc., com miniatura, duração e sinopse quando existirem.
-- Trocar de aba atualiza a lista instantaneamente, sem recarregar nem abrir página.
-- Clicar num episódio leva direto ao player (`/watch/:id`), como já acontece hoje.
+- Cabeçalho: nome da série e botões de temporada (Temporada 1, 2, 3...), no estilo dos botões já usados nos filtros do site.
+- Corpo: grade de botões de episódio, apenas com o texto "EPISÓDIO 1", "EPISÓDIO 2", etc. Sem miniatura, sem duração, sem sinopse.
+- Cada botão de episódio funciona também como barra de progresso: um preenchimento no fundo do botão mostra quanto daquele episódio o usuário já assistiu (metade assistida = metade preenchida). Episódio concluído aparece totalmente preenchido.
+- Trocar de temporada atualiza a grade instantaneamente.
+- Clicar no botão leva direto para o player daquele episódio (`/watch/:id`).
 
 Filmes e espetáculos continuam abrindo a página de detalhe normalmente. Nenhuma outra parte do sistema muda.
 
+## Progresso assistido
+
+O progresso vem do histórico já gravado pelo player (segundos assistidos por episódio) e é combinado com um registro local no navegador, para que a barra apareça imediatamente mesmo antes da sincronização. Percentual = segundos assistidos ÷ duração do episódio, limitado a 100%.
+
 ## Detalhes técnicos
 
-- Novo componente `src/components/series/SeriesBottomSheet.tsx` usando o `Sheet` existente (`side="bottom"`), reaproveitando o hook `useSeriesEpisodes` e os componentes `Tabs`, `Skeleton` e `Button` já presentes.
-- A lista de episódios reutiliza o mesmo layout de item já existente em `SeasonEpisodeList` (miniatura + título + duração), apenas com o rótulo "Episódio N".
-- `src/components/movies/MovieCard.tsx`: quando o item for uma série, o card passa a abrir o sheet (botão com o mesmo visual atual) em vez de usar `Link`; o restante do card fica idêntico.
-- Sem mudanças de banco, backend, rotas ou tokens de design.
+- Novo componente `src/components/series/SeriesBottomSheet.tsx` usando o `Sheet` existente (`side="bottom"`), com `useSeriesEpisodes` para temporadas/episódios e `Skeleton` no carregamento.
+- Novo hook `src/hooks/useEpisodeProgress.ts`: lê `video_views` do próprio usuário (SELECT já permitido pelas policies) para os episódios da série e mescla com progresso salvo em `localStorage`; nenhuma mudança de banco, policy ou edge function.
+- O player (`Watch`) passa a salvar também a posição atual em `localStorage` por episódio — única alteração fora do fluxo do sheet, necessária para a barra refletir paradas no meio.
+- `src/components/movies/MovieCard.tsx`: quando o item for uma série, o card abre o sheet em vez de usar `Link`; visual do card inalterado.
+- Sem redesign: cores, tipografia, botões e espaçamentos são os tokens/componentes já existentes.
