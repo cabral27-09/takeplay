@@ -43,7 +43,7 @@ export default function UploadVideo() {
   const { data: selectedSeriesData } = useSeriesParent(selectedSeriesId || undefined);
 
   // Episode fields
-  const [episodeDuration, setEpisodeDuration] = useState<number>(30);
+  const episodeDuration = 30;
 
   const [seasonNumber, setSeasonNumber] = useState<number | null>(1);
   const [currentEpisode, setCurrentEpisode] = useState<number | null>(1);
