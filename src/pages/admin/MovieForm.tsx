@@ -684,6 +684,7 @@ export default function MovieForm() {
             </div>
 
             {/* Access & Status */}
+            {!isAddingEpisode && (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold border-b border-border pb-2">
                 Acesso e Publicação
