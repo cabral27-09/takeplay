@@ -664,6 +664,7 @@ export default function MovieForm() {
                 </div>
               )}
 
+              {!isAddingEpisode && (
               <div className="space-y-2">
                 <Label htmlFor="trailer_url">
                   URL do Trailer (YouTube Embed)
@@ -678,6 +679,8 @@ export default function MovieForm() {
                   className={isExistingSeriesSelected ? 'bg-muted' : ''}
                 />
               </div>
+              )}
+
             </div>
 
             {/* Access & Status */}
