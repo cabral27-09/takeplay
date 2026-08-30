@@ -1,47 +1,47 @@
-## Diagnóstico
+# Login com Google + revisão das regras de planos
 
-Verifiquei o banco e a lógica de acesso:
+## Situação atual
 
-- Os **5 usuários promovidos hoje** têm registros corretos em `admin_subscriptions` (`is_active=true`, `tier=premium`) — sem duplicatas.
-- **Todos os filmes publicados têm `min_tier='free'`** — nenhum é premium. Ou seja: a checagem de assinatura no `SubscriptionGate` e no `get-video-url` nem entra em jogo. Qualquer usuário logado tem acesso "full".
-- O erro relatado ("não foi possível carregar esse vídeo") vem do `useVideoUrl.ts` quando a função `get-video-url` retorna erro OU falha na assinatura da URL.
+**Planos de espectador** (`src/lib/subscription-tiers.ts`): Grátis (R$ 0), Standard (R$ 14,90) e Premium (R$ 19,90). Cada filme tem um `min_tier` (`free` / `standard` / `premium`).
 
-Como o problema afeta **todos os vídeos** dos usuários testados e o filtro por tier não interfere (todo conteúdo é free), o gargalo real é o **`createSignedUrl` no bucket externo `manivela_filmes`** — usado por todos os vídeos com path `movies/...`. A hipótese mais provável:
+**Pacotes de produtor**: Anual R$ 299,90 (10 uploads), Semestral R$ 179,90 (5 uploads), Avulso R$ 49,90 (1 upload). Estão definidos, mas o código que controla o limite (`useProducerPurchase`) está desativado — hoje qualquer produtor sobe uploads ilimitados.
 
-- A policy de leitura do bucket `manivela_filmes` no projeto externo não está aplicada corretamente para a `anon key`, então o `createSignedUrl` do cliente externo falha silenciosamente.
-- O motivo dos "premium antigos" funcionarem é apenas coincidência (não tentaram assistir hoje, ou já tinham URL assinada em cache).
+**Regras de acesso hoje** (`SubscriptionGate`):
+- Deslogado + filme grátis: preview de 1 minuto
+- Deslogado + filme pago: bloqueado, tela de login/assinatura
+- Logado + filme grátis: acesso completo
+- Logado + assinatura de nível igual ou maior que o filme: acesso completo
+- Logado sem assinatura suficiente: preview de 1 minuto
 
-## Plano de correção
+**Papéis**: `viewer`, `producer`, `admin`, definidos no cadastro (só viewer/producer são auto-atribuíveis) e liberação manual de assinatura via `admin_subscriptions`.
 
-### 1. Logs detalhados no `get-video-url`
-Melhorar o log de erro do `createSignedUrl` para gravar o objeto de erro completo (status, mensagem) nos logs da edge function, para que a próxima falha apareça em `edge_function_logs`.
+## O que será feito
 
-### 2. Usar service_role do projeto externo para assinar
-Assinar URLs com o `service_role` do projeto externo (não com a anon key). Service role bypassa RLS e é o padrão correto para signed URLs em edge functions. Precisarei do secret:
+### 1. Entrar com Google
+- Ativar o provedor Google gerenciado pelo Lovable Cloud (sem precisar de credenciais suas).
+- Adicionar botão "Continuar com Google" na tela de login e na de cadastro, mantendo e-mail/senha funcionando normalmente.
+- Usuários que entram pelo Google recebem o papel `viewer` automaticamente; produtor continua sendo concedido pelo admin.
+- Nome e foto do Google passam a preencher o perfil.
 
-- `EXTERNAL_VIDEO_SUPABASE_SERVICE_ROLE_KEY` — a service role key do projeto externo (Supabase → Project Settings → API → `service_role` secret)
+### 2. Correções de sessão que hoje causam problemas
+- Após promover alguém a Premium, o app só reconhece na próxima visita. Será adicionada uma revalidação da assinatura ao abrir uma página de filme, para o acesso liberar na hora.
+- Tratamento de retorno do Google preservando a página que o usuário tentava acessar.
 
-Se estiver disponível, substituo o `extKey` do signing por essa chave (mantendo o anon key só para uploads TUS, que precisam ir como `authenticated` ou `anon` com policy de INSERT).
+### 3. Regras de negócio dos planos
+Sem instruções específicas suas, mantenho a estrutura atual de três níveis e apenas deixo o comportamento coerente:
+- Grátis, Standard e Premium seguem com os mesmos preços e hierarquia.
+- Preview de 1 minuto permanece o único acesso parcial; trailers seguem públicos.
+- Pacotes de produtor continuam desativados (uploads livres para quem tem papel de produtor), como está hoje. Se quiser reativar a cobrança de uploads, me diga e eu incluo.
 
-### 3. Confirmar as policies no projeto externo
-As policies enviadas antes precisavam ser rodadas no SQL editor do projeto externo:
+Se algum desses pontos não for o que você quer (por exemplo, remover o Standard, mudar preços, ou voltar a limitar uploads de produtor), é só apontar antes de aprovar.
 
-```sql
-CREATE POLICY "anon upload manivela_filmes" ON storage.objects
-  FOR INSERT TO anon WITH CHECK (bucket_id = 'manivela_filmes');
-CREATE POLICY "anon read manivela_filmes" ON storage.objects
-  FOR SELECT TO anon USING (bucket_id = 'manivela_filmes');
-```
+## Detalhes técnicos
 
-Se você já rodou, ótimo. Se não, precisamos rodar antes de qualquer nova tentativa.
+- `supabase--configure_social_auth` com `providers: ["google"]`, mantendo e-mail habilitado.
+- `lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin })` a partir de `src/pages/Auth.tsx`; destino pretendido guardado separadamente e aplicado só após a sessão hidratar.
+- `handle_new_user()` já lê `full_name`/`name` e `avatar_url`/`picture` do metadata — sem migração necessária.
+- `SubscriptionGate` chama `checkSubscription()` no mount quando o usuário está logado e não tem assinatura em cache.
 
-### 4. Não mexer
-- Nada do fluxo de assinatura / `admin_subscriptions` / `check-subscription` (já está correto).
-- Nada do frontend `SubscriptionGate` / `AuthContext`.
-- Nada do bucket local `videos` nem dos vídeos antigos.
+## Fora do escopo
 
-## O que preciso de você
-
-1. Confirmar se **rodou as duas policies acima no projeto externo**.
-2. Pegar a **service_role key** do projeto externo para eu adicionar como secret `EXTERNAL_VIDEO_SUPABASE_SERVICE_ROLE_KEY`.
-3. Assim que aprovar o plano, quando um usuário afetado tentar assistir de novo, os logs vão mostrar o erro real do storage e conseguiremos confirmar a causa em vez de adivinhar.
+Servidor OAuth para clientes externos (ChatGPT, Zapier etc.) não será implementado — o pedido foi interpretado como login social no site. Se você quiser expor a API para apps externos, isso é um segundo plano.
