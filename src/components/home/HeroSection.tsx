@@ -93,7 +93,7 @@ export const HeroSection = ({ movie }: HeroSectionProps) => {
               }>
                 <Button size="lg" className="gap-2 text-base px-8">
                   <Play className="h-5 w-5 fill-current" />
-                  {movie.content_type === 'serie' && !movie.series_id ? 'Ver Episódios' : 'Assistir'}
+                  {movie.content_type === 'serie' && !movie.series_id ? ' ASSISTIR' : 'Assistir'}
                 </Button>
               </Link>
               <Link to={`/movie/${movie.id}`}>
