@@ -24,6 +24,7 @@ import { useVideoUrl } from '@/hooks/useVideoUrl';
 import { useAirPlay } from '@/hooks/useAirPlay';
 import { useChromecast } from '@/hooks/useChromecast';
 import { useVideoViews } from '@/hooks/useVideoViews';
+import { saveLocalProgress } from '@/lib/episodeProgress';
 import { CastButton } from './CastButton';
 
 interface VideoPlayerProps {
