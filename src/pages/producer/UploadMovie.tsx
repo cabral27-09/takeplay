@@ -130,9 +130,6 @@ export default function ProducerUploadMovie() {
     if (seriesMode === 'new') {
       setSelectedSeriesId(null);
       setFormData(prev => ({ ...prev, series_id: null }));
-      setEpisodeTitle('');
-      setEpisodeDuration(30);
-      setEpisodeThumbnail('');
     }
   }, [seriesMode]);
 
