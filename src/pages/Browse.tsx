@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Layout } from '@/components/layout/Layout';
 import { MovieCard } from '@/components/movies/MovieCard';
@@ -6,15 +6,19 @@ import { useMovies } from '@/hooks/useMovies';
 import { useGenres } from '@/hooks/useGenres';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { excludeEpisodes } from '@/lib/catalog';
 
 const Browse = () => {
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
-  const { data: allMovies = [], isLoading: isLoadingMovies } = useMovies();
+  const { data: movies = [], isLoading: isLoadingMovies } = useMovies();
   const { data: genres = [], isLoading: isLoadingGenres } = useGenres();
+
+  const allMovies = useMemo(() => excludeEpisodes(movies), [movies]);
 
   const filteredMovies = selectedGenre
     ? allMovies.filter(m => m.genres.some(g => g.name === selectedGenre))
     : allMovies;
+
 
   const isLoading = isLoadingMovies || isLoadingGenres;
 
