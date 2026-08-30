@@ -1,14 +1,18 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Play, Info, Star } from 'lucide-react';
 import { MovieWithGenres } from '@/types/movie';
 import { Button } from '@/components/ui/button';
+import { SeriesBottomSheet } from '@/components/series/SeriesBottomSheet';
 
 interface HeroSectionProps {
   movie: MovieWithGenres;
 }
 
 export const HeroSection = ({ movie }: HeroSectionProps) => {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const isSeries = movie.content_type === 'serie' && !movie.series_id;
   const backdrop = movie.backdrop_url || movie.thumbnail_url || '/placeholder.svg';
 
   return (
@@ -87,15 +91,19 @@ export const HeroSection = ({ movie }: HeroSectionProps) => {
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-4">
-              <Link to={movie.content_type === 'serie' && !movie.series_id 
-                ? `/movie/${movie.id}` 
-                : `/watch/${movie.id}`
-              }>
-                <Button size="lg" className="gap-2 text-base px-8">
+              {isSeries ? (
+                <Button size="lg" className="gap-2 text-base px-8" onClick={() => setSheetOpen(true)}>
                   <Play className="h-5 w-5 fill-current" />
-                  {movie.content_type === 'serie' && !movie.series_id ? ' ASSISTIR' : 'Assistir'}
+                  {'\u00a0ASSISTIR'}
                 </Button>
-              </Link>
+              ) : (
+                <Link to={`/watch/${movie.id}`}>
+                  <Button size="lg" className="gap-2 text-base px-8">
+                    <Play className="h-5 w-5 fill-current" />
+                    Assistir
+                  </Button>
+                </Link>
+              )}
               <Link to={`/movie/${movie.id}`}>
                 <Button variant="secondary" size="lg" className="gap-2 text-base px-8">
                   <Info className="h-5 w-5" />
@@ -109,6 +117,10 @@ export const HeroSection = ({ movie }: HeroSectionProps) => {
 
       {/* Bottom Fade */}
       <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-cinema-black to-transparent" />
+
+      {isSeries && (
+        <SeriesBottomSheet series={movie} open={sheetOpen} onOpenChange={setSheetOpen} />
+      )}
     </section>
   );
 };
