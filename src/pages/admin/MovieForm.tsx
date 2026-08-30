@@ -625,6 +625,7 @@ export default function MovieForm() {
                 )}
               </div>
               
+              {!isAddingEpisode && (
               <div className={`grid gap-6 md:grid-cols-2 ${isExistingSeriesSelected ? 'opacity-60 pointer-events-none' : ''}`}>
                 <div className="space-y-2">
                   <Label>Thumbnail (2:3)</Label>
@@ -644,6 +645,8 @@ export default function MovieForm() {
                   />
                 </div>
               </div>
+              )}
+
 
               {!isCreatingSeriesParent && (
                 <div className="space-y-2">
