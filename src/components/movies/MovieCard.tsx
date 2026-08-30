@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Play, Star } from 'lucide-react';
 import { MovieWithGenres } from '@/types/movie';
 import { cn } from '@/lib/utils';
 import { ShareButton } from '@/components/share/ShareButton';
+import { SeriesBottomSheet } from '@/components/series/SeriesBottomSheet';
 
 interface MovieCardProps {
   movie: MovieWithGenres;
@@ -14,25 +16,22 @@ interface MovieCardProps {
 export const MovieCard = ({ movie, index = 0, variant = 'default' }: MovieCardProps) => {
   const isFeatured = variant === 'featured';
   const isCompact = variant === 'compact';
+  const isSeries = movie.content_type === 'serie' && !movie.series_id;
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const thumbnail = isFeatured 
     ? (movie.backdrop_url || movie.thumbnail_url || '/placeholder.svg')
     : (movie.thumbnail_url || movie.backdrop_url || '/placeholder.svg');
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05, duration: 0.4 }}
-    >
-      <Link
-        to={`/movie/${movie.id}`}
-        className={cn(
-          'group relative block overflow-hidden rounded-xl bg-card transition-all duration-300',
-          'hover:ring-2 hover:ring-primary/50 hover:shadow-glow',
-          isFeatured ? 'aspect-[16/9]' : isCompact ? 'aspect-[3/4]' : 'aspect-[2/3]'
-        )}
-      >
+  const cardClassName = cn(
+    'group relative block w-full overflow-hidden rounded-xl bg-card text-left transition-all duration-300',
+    'hover:ring-2 hover:ring-primary/50 hover:shadow-glow',
+    isFeatured ? 'aspect-[16/9]' : isCompact ? 'aspect-[3/4]' : 'aspect-[2/3]'
+  );
+
+  const cardInner = (
+    <>
+
         {/* Thumbnail */}
         <img
           src={thumbnail}
@@ -97,7 +96,28 @@ export const MovieCard = ({ movie, index = 0, variant = 'default' }: MovieCardPr
             </p>
           )}
         </div>
-      </Link>
+    </>
+  );
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.05, duration: 0.4 }}
+    >
+      {isSeries ? (
+        <>
+          <button type="button" onClick={() => setSheetOpen(true)} className={cardClassName}>
+            {cardInner}
+          </button>
+          <SeriesBottomSheet series={movie} open={sheetOpen} onOpenChange={setSheetOpen} />
+        </>
+      ) : (
+        <Link to={`/movie/${movie.id}`} className={cardClassName}>
+          {cardInner}
+        </Link>
+      )}
     </motion.div>
   );
 };
+

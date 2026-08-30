@@ -24,6 +24,7 @@ import { useVideoUrl } from '@/hooks/useVideoUrl';
 import { useAirPlay } from '@/hooks/useAirPlay';
 import { useChromecast } from '@/hooks/useChromecast';
 import { useVideoViews } from '@/hooks/useVideoViews';
+import { saveLocalProgress } from '@/lib/episodeProgress';
 import { CastButton } from './CastButton';
 
 interface VideoPlayerProps {
@@ -60,6 +61,7 @@ export function VideoPlayer({
   const containerRef = useRef<HTMLDivElement>(null);
   const rafIdRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
+  const lastLocalSaveRef = useRef<number>(0);
   const watchedSecondsRef = useRef<number>(0);
   
   // Casting hooks
@@ -131,7 +133,13 @@ export function VideoPlayer({
         if (!isScrubbingRef.current) {
           setProgress((t / d) * 100);
         }
+        // Persist playback position locally (throttled to ~5s)
+        if (movieId && now - lastLocalSaveRef.current > 5000) {
+          lastLocalSaveRef.current = now;
+          saveLocalProgress(movieId, t, d);
+        }
       }
+
 
       // Track watched seconds (both preview and view tracking)
       if (!v.paused && !v.ended) {
