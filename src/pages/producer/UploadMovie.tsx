@@ -250,9 +250,9 @@ export default function ProducerUploadMovie() {
         // Create episode record linked to series parent
         const submitData: MovieFormData = {
           ...formData,
-          title: episodeTitle, // Episode has its own title
-          duration: episodeDuration,
-          thumbnail_url: episodeThumbnail || formData.thumbnail_url, // Episode can have its own cover
+          title: `Episódio ${formData.current_episode}`,
+          synopsis: '',
+
           status: 'pending_review',
           producer_name: profile?.full_name || formData.producer_name,
         };
