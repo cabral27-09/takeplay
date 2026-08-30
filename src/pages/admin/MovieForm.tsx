@@ -171,10 +171,10 @@ export default function MovieForm() {
 
     // When adding episode, validate episode-specific fields
     if (isAddingEpisode && !isEditing) {
-      if (!episodeTitle.trim()) {
+      if (!formData.season_number || !formData.current_episode) {
         toast({
           title: 'Erro de validação',
-          description: 'O título do episódio é obrigatório.',
+          description: 'Informe a temporada e o número do episódio.',
           variant: 'destructive',
         });
         return;
@@ -204,13 +204,17 @@ export default function MovieForm() {
       submitData.video_url = '';
     }
     
-    // Episode: use episode-specific fields
+    // Episode: inherit everything from the parent series
     if (isAddingEpisode && !isEditing) {
-      submitData.title = episodeTitle;
-      submitData.synopsis = episodeSynopsis;
-      submitData.duration = episodeDuration;
-      submitData.thumbnail_url = episodeThumbnail || formData.thumbnail_url;
+      submitData.title = `Episódio ${formData.current_episode}`;
+      submitData.synopsis = '';
+      submitData.status = 'published';
+      submitData.featured = false;
+      submitData.duration = selectedSeriesData?.duration || formData.duration;
+      submitData.thumbnail_url = selectedSeriesData?.thumbnail_url || formData.thumbnail_url;
+      submitData.backdrop_url = selectedSeriesData?.backdrop_url || formData.backdrop_url;
     }
+
 
     const contentLabel = isCreatingSeriesParent ? 'Série' : isAddingEpisode ? 'Episódio' : formData.content_type === 'espetaculo' ? 'Espetáculo' : 'Filme';
 
