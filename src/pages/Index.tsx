@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { HeroSection } from '@/components/home/HeroSection';
 import { MovieRow } from '@/components/movies/MovieRow';
@@ -5,13 +6,18 @@ import { useMovies, useFeaturedMovies } from '@/hooks/useMovies';
 import { useGenres } from '@/hooks/useGenres';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyHomeHero } from '@/components/home/EmptyHomeHero';
+import { excludeEpisodes } from '@/lib/catalog';
 
 const Index = () => {
-  const { data: allMovies = [], isLoading: isLoadingMovies } = useMovies();
-  const { data: featuredMovies = [], isLoading: isLoadingFeatured } = useFeaturedMovies();
+  const { data: movies = [], isLoading: isLoadingMovies } = useMovies();
+  const { data: featured = [], isLoading: isLoadingFeatured } = useFeaturedMovies();
   const { data: genres = [] } = useGenres();
 
+  const allMovies = useMemo(() => excludeEpisodes(movies), [movies]);
+  const featuredMovies = useMemo(() => excludeEpisodes(featured), [featured]);
+
   const heroMovie = featuredMovies[0] || allMovies[0];
+
 
   const moviesByGenre = genres.map(genre => ({
     genre,
