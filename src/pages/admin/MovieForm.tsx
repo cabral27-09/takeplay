@@ -64,11 +64,6 @@ export default function MovieForm() {
     series_id: null,
   });
 
-  // Episode-specific state (used when adding episode to existing series)
-  const [episodeTitle, setEpisodeTitle] = useState('');
-  const [episodeSynopsis, setEpisodeSynopsis] = useState('');
-  const [episodeDuration, setEpisodeDuration] = useState<number>(30);
-  const [episodeThumbnail, setEpisodeThumbnail] = useState('');
 
   // Fetch genres based on content type - must be after formData declaration
   const { data: genres, isLoading: genresLoading } = useGenresByContentType(formData.content_type);
