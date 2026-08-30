@@ -611,6 +611,8 @@ export default function MovieForm() {
                 ))}
               </div>
             </div>
+            )}
+
 
             {/* Media */}
             <div className="space-y-4">
