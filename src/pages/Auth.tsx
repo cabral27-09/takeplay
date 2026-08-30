@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { lovable } from '@/integrations/lovable/index';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,9 +46,13 @@ export default function Auth() {
 
   useEffect(() => {
     if (user && !isLoading) {
-      navigate(redirectTo);
+      const stored = sessionStorage.getItem('post_auth_redirect');
+      sessionStorage.removeItem('post_auth_redirect');
+      const target = stored && stored.startsWith('/') && !stored.startsWith('//') ? stored : redirectTo;
+      navigate(target, { replace: true });
     }
   }, [user, isLoading, navigate, redirectTo]);
+
 
   const validateForm = () => {
     try {
@@ -249,21 +255,23 @@ export default function Auth() {
                   onClick={async () => {
                     setIsGoogleLoading(true);
                     try {
-                      const { error } = await supabase.auth.signInWithOAuth({
-                        provider: 'google',
-                        options: {
-                          redirectTo: `${window.location.origin}${redirectTo}`,
-                        },
+                      sessionStorage.setItem('post_auth_redirect', redirectTo);
+                      const result = await lovable.auth.signInWithOAuth('google', {
+                        redirect_uri: window.location.origin,
                       });
-                      if (error) {
-                        toast.error('Erro ao conectar com Google: ' + error.message);
+                      if (result.error) {
+                        toast.error('Erro ao conectar com Google');
+                        return;
                       }
+                      if (result.redirected) return;
+                      navigate(redirectTo);
                     } catch (err) {
                       toast.error('Erro inesperado ao conectar com Google');
                     } finally {
                       setIsGoogleLoading(false);
                     }
                   }}
+
                 >
                   {isGoogleLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
