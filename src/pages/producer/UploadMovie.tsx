@@ -78,10 +78,6 @@ export default function ProducerUploadMovie() {
     series_id: null,
   });
 
-  // Episode-specific fields (only used when adding episode to existing series)
-  const [episodeTitle, setEpisodeTitle] = useState('');
-  const [episodeDuration, setEpisodeDuration] = useState(30);
-  const [episodeThumbnail, setEpisodeThumbnail] = useState('');
 
   const { data: genres, isLoading: genresLoading } = useGenresByContentType(formData.content_type);
   const { data: producerSeries, isLoading: producerSeriesLoading } = useProducerSeriesList(profile?.full_name);
