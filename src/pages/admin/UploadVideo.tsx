@@ -245,16 +245,6 @@ export default function UploadVideo() {
                   <div className="space-y-4 pt-4 border-t border-border/50">
                     <h3 className="text-md font-semibold">Dados do Episódio</h3>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="ep_title">Título do Episódio *</Label>
-                      <Input id="ep_title" value={episodeTitle} onChange={(e) => setEpisodeTitle(e.target.value)} placeholder="Ex: A Ilha" required />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="ep_synopsis">Sinopse do Episódio</Label>
-                      <Textarea id="ep_synopsis" value={episodeSynopsis} onChange={(e) => setEpisodeSynopsis(e.target.value)} placeholder="Descrição deste episódio..." rows={3} />
-                    </div>
-
                     <div className="grid gap-4 md:grid-cols-3">
                       <div className="space-y-2">
                         <Label htmlFor="ep_season">Temporada *</Label>
@@ -270,12 +260,12 @@ export default function UploadVideo() {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Capa do Episódio (opcional)</Label>
-                      <ImageUploader value={episodeThumbnail} onChange={setEpisodeThumbnail} aspectRatio="backdrop" />
-                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      O episódio será salvo como "Episódio {currentEpisode || 1}" e usará a capa e a sinopse da série.
+                    </p>
                   </div>
                 )}
+
               </div>
             )}
 
