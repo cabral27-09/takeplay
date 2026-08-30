@@ -96,7 +96,28 @@ export const MovieCard = ({ movie, index = 0, variant = 'default' }: MovieCardPr
             </p>
           )}
         </div>
-      </Link>
+    </>
+  );
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.05, duration: 0.4 }}
+    >
+      {isSeries ? (
+        <>
+          <button type="button" onClick={() => setSheetOpen(true)} className={cardClassName}>
+            {cardInner}
+          </button>
+          <SeriesBottomSheet series={movie} open={sheetOpen} onOpenChange={setSheetOpen} />
+        </>
+      ) : (
+        <Link to={`/movie/${movie.id}`} className={cardClassName}>
+          {cardInner}
+        </Link>
+      )}
     </motion.div>
   );
 };
+
