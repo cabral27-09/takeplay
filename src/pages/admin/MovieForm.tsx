@@ -443,6 +443,7 @@ export default function MovieForm() {
             )}
 
             {/* Basic Info */}
+            {!isAddingEpisode && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 border-b border-border pb-2">
                 <h2 className="text-lg font-semibold">
