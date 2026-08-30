@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Lock, Crown, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SUBSCRIPTION_TIERS } from "@/lib/subscription-tiers";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 type MovieTier = 'free' | 'standard' | 'premium';
