@@ -6,10 +6,13 @@ import { MovieCard } from '@/components/movies/MovieCard';
 import { useMovies } from '@/hooks/useMovies';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { excludeEpisodes } from '@/lib/catalog';
 
 const Search = () => {
   const [query, setQuery] = useState('');
-  const { data: allMovies = [], isLoading } = useMovies();
+  const { data: movies = [], isLoading } = useMovies();
+
+  const allMovies = useMemo(() => excludeEpisodes(movies), [movies]);
 
   const searchResults = useMemo(() => {
     if (!query.trim()) return [];
@@ -22,6 +25,7 @@ const Search = () => {
       (movie.producer_name && movie.producer_name.toLowerCase().includes(searchTerm))
     );
   }, [query, allMovies]);
+
 
   return (
     <Layout>
