@@ -104,12 +104,6 @@ export const HeroSection = ({ movie }: HeroSectionProps) => {
                   </Button>
                 </Link>
               )}
-              <Link to={`/movie/${movie.id}`}>
-                <Button variant="secondary" size="lg" className="gap-2 text-base px-8">
-                  <Info className="h-5 w-5" />
-                  Mais Detalhes
-                </Button>
-              </Link>
             </div>
           </motion.div>
         </div>
