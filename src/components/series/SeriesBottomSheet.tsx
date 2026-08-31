@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSeriesEpisodes } from '@/hooks/useSeriesEpisodes';
 import { useEpisodeProgress } from '@/hooks/useEpisodeProgress';
@@ -38,15 +38,12 @@ export function SeriesBottomSheet({ series, open, onOpenChange }: SeriesBottomSh
   const { data: progress } = useEpisodeProgress(episodeIds, durations);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        className="max-h-[85vh] overflow-y-auto rounded-t-2xl border-border"
-      >
-        <SheetHeader className="sr-only">
-          <SheetTitle>{series.title}</SheetTitle>
-          <SheetDescription>Temporadas e episódios de {series.title}</SheetDescription>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl border-border sm:max-w-3xl">
+        <DialogHeader className="sr-only">
+          <DialogTitle>{series.title}</DialogTitle>
+          <DialogDescription>Temporadas e episódios de {series.title}</DialogDescription>
+        </DialogHeader>
 
         {/* Temporadas */}
         {isLoading ? (
