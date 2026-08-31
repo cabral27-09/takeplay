@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Play, ArrowLeft, Star, Clock, Calendar, Film, User, Tv } from 'lucide-react';
@@ -7,11 +8,12 @@ import { MovieRow } from '@/components/movies/MovieRow';
 import { useMovie, useMovies } from '@/hooks/useMovies';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ShareButton } from '@/components/share/ShareButton';
-import { SeasonEpisodeList } from '@/components/series/SeasonEpisodeList';
+import { SeriesBottomSheet } from '@/components/series/SeriesBottomSheet';
 
 const MovieDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [sheetOpen, setSheetOpen] = useState(false);
   const { data: movie, isLoading: isLoadingMovie } = useMovie(id);
   const { data: allMovies = [] } = useMovies();
 
@@ -191,9 +193,13 @@ const MovieDetail = () => {
                 </div>
               )}
 
-              {/* Share button for series */}
+              {/* Assistir + Share button for series */}
               {isParentSeries && (
                 <div className="flex items-center gap-4">
+                  <Button size="xl" className="gap-3" onClick={() => setSheetOpen(true)}>
+                    <Play className="h-6 w-6 fill-current" />
+                    Assistir
+                  </Button>
                   <ShareButton 
                     movieId={movie.id} 
                     movieTitle={movie.title}
@@ -205,11 +211,9 @@ const MovieDetail = () => {
         </div>
       </section>
 
-      {/* Season & Episodes List for Series */}
+      {/* Modal de temporadas/episódios */}
       {isParentSeries && (
-        <section className="container py-12">
-          <SeasonEpisodeList seriesId={movie.id} seriesTitle={movie.title} />
-        </section>
+        <SeriesBottomSheet series={movie} open={sheetOpen} onOpenChange={setSheetOpen} />
       )}
 
       {/* Similar Movies */}
