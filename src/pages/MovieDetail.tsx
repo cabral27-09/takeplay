@@ -209,11 +209,9 @@ const MovieDetail = () => {
         </div>
       </section>
 
-      {/* Season & Episodes List for Series */}
+      {/* Modal de temporadas/episódios */}
       {isParentSeries && (
-        <section className="container py-12">
-          <SeasonEpisodeList seriesId={movie.id} seriesTitle={movie.title} />
-        </section>
+        <SeriesBottomSheet series={movie} open={sheetOpen} onOpenChange={setSheetOpen} />
       )}
 
       {/* Similar Movies */}
