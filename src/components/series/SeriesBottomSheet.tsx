@@ -110,8 +110,8 @@ export function SeriesBottomSheet({ series, open, onOpenChange }: SeriesBottomSh
             </div>
           </div>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 
