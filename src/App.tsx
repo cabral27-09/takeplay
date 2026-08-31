@@ -7,7 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { UploadProvider } from "@/contexts/UploadContext";
 import { GlobalUploadIndicator } from "@/components/upload/GlobalUploadIndicator";
 import Index from "./pages/Index";
-import MovieDetail from "./pages/MovieDetail";
+
 import Watch from "./pages/Watch";
 import Share from "./pages/Share";
 import Browse from "./pages/Browse";
