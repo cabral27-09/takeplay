@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Play, Star, Info } from 'lucide-react';
+import { Play, Star } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Movie } from '@/data/mockMovies';
