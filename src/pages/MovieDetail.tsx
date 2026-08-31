@@ -8,11 +8,12 @@ import { MovieRow } from '@/components/movies/MovieRow';
 import { useMovie, useMovies } from '@/hooks/useMovies';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ShareButton } from '@/components/share/ShareButton';
-import { SeasonEpisodeList } from '@/components/series/SeasonEpisodeList';
+import { SeriesBottomSheet } from '@/components/series/SeriesBottomSheet';
 
 const MovieDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [sheetOpen, setSheetOpen] = useState(false);
   const { data: movie, isLoading: isLoadingMovie } = useMovie(id);
   const { data: allMovies = [] } = useMovies();
 
