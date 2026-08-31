@@ -286,7 +286,7 @@ export default function ProducerMovies() {
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
                               {movie.status === 'published' && (
-                                <Link to={`/movie/${movie.id}`}>
+                                <Link to={`/watch/${movie.id}`}>
                                   <Button variant="ghost" size="icon">
                                     <Eye className="h-4 w-4" />
                                   </Button>
