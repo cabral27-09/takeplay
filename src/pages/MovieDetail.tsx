@@ -191,9 +191,13 @@ const MovieDetail = () => {
                 </div>
               )}
 
-              {/* Share button for series */}
+              {/* Assistir + Share button for series */}
               {isParentSeries && (
                 <div className="flex items-center gap-4">
+                  <Button size="xl" className="gap-3" onClick={() => setSheetOpen(true)}>
+                    <Play className="h-6 w-6 fill-current" />
+                    Assistir
+                  </Button>
                   <ShareButton 
                     movieId={movie.id} 
                     movieTitle={movie.title}
