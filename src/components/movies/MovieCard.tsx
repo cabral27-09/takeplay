@@ -113,7 +113,7 @@ export const MovieCard = ({ movie, index = 0, variant = 'default' }: MovieCardPr
           <SeriesBottomSheet series={movie} open={sheetOpen} onOpenChange={setSheetOpen} />
         </>
       ) : (
-        <Link to={`/movie/${movie.id}`} className={cardClassName}>
+        <Link to={`/watch/${movie.id}`} className={cardClassName}>
           {cardInner}
         </Link>
       )}
