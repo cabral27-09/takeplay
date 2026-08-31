@@ -39,7 +39,7 @@ export function SeriesBottomSheet({ series, open, onOpenChange }: SeriesBottomSh
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl border-border sm:max-w-3xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl border-2 border-primary/70 sm:max-w-3xl">
         <DialogHeader className="sr-only">
           <DialogTitle>{series.title}</DialogTitle>
           <DialogDescription>Temporadas e episódios de {series.title}</DialogDescription>
@@ -71,10 +71,10 @@ export function SeriesBottomSheet({ series, open, onOpenChange }: SeriesBottomSh
                   key={season.seasonNumber}
                   onClick={() => setSelectedSeason(season.seasonNumber)}
                   className={cn(
-                    'rounded-md border px-6 py-2.5 text-base font-medium uppercase tracking-wide transition-colors',
+                    'rounded-md border-2 px-6 py-2.5 text-base font-medium uppercase tracking-wide transition-colors',
                     activeSeason?.seasonNumber === season.seasonNumber
                       ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border text-foreground hover:border-primary/60 hover:text-primary',
+                      : 'border-foreground/70 text-foreground hover:border-primary hover:text-primary',
                   )}
                 >
                   Temporada {season.seasonNumber}
@@ -93,7 +93,7 @@ export function SeriesBottomSheet({ series, open, onOpenChange }: SeriesBottomSh
                       onOpenChange(false);
                       navigate(`/watch/${episode.id}`);
                     }}
-                    className="relative overflow-hidden rounded-md border border-border px-3 py-2.5 text-sm font-medium uppercase tracking-wide text-foreground transition-colors hover:border-primary/60 hover:text-primary"
+                    className="relative overflow-hidden rounded-md border-2 border-foreground/70 px-3 py-2.5 text-sm font-medium uppercase tracking-wide text-foreground transition-colors hover:border-primary hover:text-primary"
                   >
                     {/* Barra de progresso */}
                     <span
