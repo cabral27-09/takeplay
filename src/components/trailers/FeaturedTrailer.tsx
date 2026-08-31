@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Play, Star, Info } from 'lucide-react';
+import { Play, Star } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Movie } from '@/data/mockMovies';
@@ -78,17 +78,6 @@ export const FeaturedTrailer = ({ movie }: FeaturedTrailerProps) => {
               >
                 <Play className="w-5 h-5 fill-current" />
                 Assistir Trailer
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                className="gap-2 text-base border-border/50 hover:bg-secondary"
-                asChild
-              >
-                <Link to={`/movie/${movie.id}`}>
-                  <Info className="w-5 h-5" />
-                  Mais Detalhes
-                </Link>
               </Button>
             </div>
           </motion.div>

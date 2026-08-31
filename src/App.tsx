@@ -7,7 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { UploadProvider } from "@/contexts/UploadContext";
 import { GlobalUploadIndicator } from "@/components/upload/GlobalUploadIndicator";
 import Index from "./pages/Index";
-import MovieDetail from "./pages/MovieDetail";
+
 import Watch from "./pages/Watch";
 import Share from "./pages/Share";
 import Browse from "./pages/Browse";
@@ -46,7 +46,7 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/movie/:id" element={<MovieDetail />} />
+              
               <Route path="/watch/:id" element={<Watch />} />
               <Route path="/share/:id" element={<Share />} />
               <Route path="/browse" element={<Browse />} />

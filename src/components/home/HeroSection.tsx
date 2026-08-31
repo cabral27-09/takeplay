@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Play, Info, Star } from 'lucide-react';
+import { Play, Star } from 'lucide-react';
 import { MovieWithGenres } from '@/types/movie';
 import { Button } from '@/components/ui/button';
 import { SeriesBottomSheet } from '@/components/series/SeriesBottomSheet';
@@ -104,12 +104,6 @@ export const HeroSection = ({ movie }: HeroSectionProps) => {
                   </Button>
                 </Link>
               )}
-              <Link to={`/movie/${movie.id}`}>
-                <Button variant="secondary" size="lg" className="gap-2 text-base px-8">
-                  <Info className="h-5 w-5" />
-                  Mais Detalhes
-                </Button>
-              </Link>
             </div>
           </motion.div>
         </div>
