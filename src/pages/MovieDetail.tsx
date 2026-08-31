@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Play, ArrowLeft, Star, Clock, Calendar, Film, User, Tv } from 'lucide-react';
