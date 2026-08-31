@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Play, Info, Star } from 'lucide-react';
+import { Play, Star } from 'lucide-react';
 import { MovieWithGenres } from '@/types/movie';
 import { Button } from '@/components/ui/button';
 import { SeriesBottomSheet } from '@/components/series/SeriesBottomSheet';
